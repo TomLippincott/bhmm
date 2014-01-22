@@ -1,0 +1,12 @@
+hyperParameter=0.01
+prefixParams=1
+wordParams= 1
+suffixParams=1
+isSuffixAllowed=true
+isPrefixAllowed=true
+isMultipleStemsAllowed=true
+compound-prior=0.01
+burn-in=20
+segmentation-prior=0.6
+caching-prior=0.01
+non-parametric=false
