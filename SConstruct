@@ -7,7 +7,7 @@ import logging
 import time
 from os.path import join as pjoin
 
-vars = Variables("custom.py")
+vars = Variables("config.py")
 vars.AddVariables(
     ("OUTPUT_WIDTH", "", 130),
     BoolVariable("DEBUG", "", False),
