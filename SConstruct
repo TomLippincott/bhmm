@@ -11,15 +11,14 @@ vars = Variables("custom.py")
 vars.AddVariables(
     ("OUTPUT_WIDTH", "", 130),
     BoolVariable("DEBUG", "", False),
-    ("MORPHOLOGY_PATH", "", ""),
-    #("NUM_SENTENCES", "", 1021),
+    ("MORPHOLOGY_PATH", "", "/home/tom/projects/jointmorphologytagger"),
     ("NUM_SENTENCES", "", 10),
     ("NUM_TAGS", "", 17),
     ("NUM_BURNINS", "", 10),
     ("NUM_SAMPLES", "", 1),
     ("MARKOV", "", 2),
-    ("TRANSITION_PRIOR", "", .01),
-    ("EMISSION_PRIOR", "", .01),
+    ("TRANSITION_PRIOR", "", .1),
+    ("EMISSION_PRIOR", "", .1),
     ("SCALA_OPTS", "", ""),
     )
 

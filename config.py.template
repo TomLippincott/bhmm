@@ -1,0 +1,8 @@
+MORPHOLOGY_PATH = "/home/tom/projects/jointmorphologytagger"
+NUM_SENTENCES = 100
+NUM_TAGS = 17
+NUM_BURNINS = 10
+NUM_SAMPLES = 1
+MARKOV = 2
+TRANSITION_PRIOR = .1
+EMISSION_PRIOR = .1
