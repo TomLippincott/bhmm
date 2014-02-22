@@ -7,7 +7,7 @@ import logging
 import time
 from os.path import join as pjoin
 
-vars = Variables("config.py")
+vars = Variables("custom.py")
 vars.AddVariables(
     ("OUTPUT_WIDTH", "", 130),
     BoolVariable("DEBUG", "", False),
@@ -48,11 +48,9 @@ java_classes = env.Java(pjoin("work", "classes"), pjoin(env["MORPHOLOGY_PATH"], 
 
 morphology = env.Jar(pjoin("work", "morphology.jar"), java_classes)
 
-config = env.File(pjoin("data", "setting.txt"))
-
 #env.Scala(source=[morphology] + env.Glob("src/*scala"),
 #          SCALA_OPTS="-cp ${SOURCES[0]}")
 
-env.RunScala("work/output.txt", [pjoin("src", "BHMM.scala"), morphology, config, data], 
-             SCALA_OPTS="-cp ${SOURCES[1]}",
-             ARGUMENTS="--perplexity --config ${SOURCES[2]} --output ${TARGET} --markov ${MARKOV} --num-sentences ${NUM_SENTENCES} --num-tags ${NUM_TAGS} --num-burnins ${NUM_BURNINS} --num-samples ${NUM_SAMPLES} --transition-prior ${TRANSITION_PRIOR} --emission-prior ${EMISSION_PRIOR} --input ${SOURCES[3]}")
+env.RunScala("work/output.txt", [pjoin("src", "BHMM.scala"), morphology, data], 
+             SCALA_OPTS="-cp ${SOURCES[1]}:/usr/share/java/commons-math3.jar",
+             ARGUMENTS="--perplexity --output ${TARGET} --markov ${MARKOV} --num-sentences ${NUM_SENTENCES} --num-tags ${NUM_TAGS} --num-burnins ${NUM_BURNINS} --num-samples ${NUM_SAMPLES} --transition-prior ${TRANSITION_PRIOR} --emission-prior ${EMISSION_PRIOR} --input ${SOURCES[2]}")

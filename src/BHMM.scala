@@ -1,3 +1,4 @@
+import org.apache.commons.math3.special.Gamma
 import java.io.File
 import Accessories._
 import java.io._
@@ -6,15 +7,21 @@ import java.util.Vector
 import java.util.Date
 import java.util.zip._
 import java.util.logging._
+import AdaptorGrammar.AdaptorSet
+import AdaptorGrammar.RuleSet
+import AdaptorGrammar.PitmanYorPrior
+import Sampler.AdaptorSampler
+import Data.Setting
+import Data.AdaptorBasedDataSet
+
+/*
 import CFG.NonTerminal
 import CFG.Rule
 import CFG.RuleRightHand
 import CFG.Terminal
 import Data._
-import AdaptorGrammar.AdaptorSet
-import AdaptorGrammar.RuleSet
 import Parser.CKY
-import Sampler.AdaptorSampler
+*/
 
 object BHMM{  
 
@@ -63,16 +70,16 @@ object BHMM{
   def fromProb(x : Double) : Prob = new Prob(logbase(x))
   def fromLog(x : Double) : Prob = new Prob(x)
 
-  class Prob(x : Double) extends Ordered[Prob]{
+  class Prob(val l : Double) extends Ordered[Prob]{
     def compare(that : Prob) = if(this.l - that.l < 0){ -1 }else if(this.l == that.l){ 0 }else{ 1 }
-    def l = x
-    def *(y : Prob) : Prob = new Prob(l + y.l)
-    def /(y : Prob) : Prob = new Prob(l - y.l)
+    def p = expbase(l)
+    def *(y : Prob) : Prob = fromLog(l + y.l)
+    def /(y : Prob) : Prob = fromLog(l - y.l)
     def inverse = fromProb(1.0) / this
     def +(y : Prob) : Prob = {
       def go(a : Double, b : Double) : Prob = {
 	val d = a - b
-	if(d < -20){ new Prob(l) }else{ new Prob(b + logbase(1.0 + expbase(d))) }
+	if(d < -20){ fromLog(b) }else{ fromLog(b + logbase(1.0 + expbase(d))) }
       }
       if(l < y.l){
 	go(l, y.l) 
@@ -81,7 +88,7 @@ object BHMM{
 	go(y.l, l) 
       }
     }
-    override def toString = "Prob(%f/%f)".format(expbase(l), l)
+    override def toString = "Prob(%f/%s)".format(p, if(l == Double.NegativeInfinity){ "-" }else{ "%f".format(l) })
   }
 
   class Dist(vs : Seq[Prob]){
@@ -90,7 +97,10 @@ object BHMM{
     def sample(d : Double) : Int = {
       val p = fromProb(d)
       val ms = ps.tail.scanLeft(ps.head)((x, y) => x + y)
-      ms.lastIndexWhere((x => p > x)) + 1
+      val v = ms.indexWhere((x => p <= x))
+      logger.finer("sampled %d: %s %s".format(v, p, ms))
+      assert(v < vs.length)
+      v
     }
     def *(ys : Dist) : Dist = {
       ps.zip(ys.ps).map(x => x._1 * x._2)
@@ -137,9 +147,9 @@ object BHMM{
   type Counts = scala.collection.mutable.ArraySeq[VectorCounts]  
   type DataSet = scala.collection.mutable.ArraySeq[Location]
 
-
   def parseInput(numLines: Int, numTags : Int, markov: Int, filename: String, wordLookup: Lookup, tagLookup: Lookup) : DataSet = {
     val nullLoc = (-1, numTags, 0)
+    val end = (0 to markov - 1).map(_ => nullLoc)
     def parseLocation(loc: String): Location = {
       val toks = loc.split("/")
       val word = toks.dropRight(1).mkString("/")
@@ -153,39 +163,25 @@ object BHMM{
       (0 until markov).map(_ => nullLoc) ++ line.split(" ").map(parseLocation(_))
     }
     val src = io.Source.fromInputStream(new GZIPInputStream(new BufferedInputStream(new FileInputStream(filename))))
-    collection.mutable.ArraySeq[Location](src.getLines().take(numLines).map(parseSentence(_)).toList.flatten.toArray : _*)
+    collection.mutable.ArraySeq[Location](src.getLines().take(numLines).map(parseSentence(_)).toList.flatten.++(end).toArray : _*)
   }
 
   def runTests = {
-
     val rng = new scala.util.Random()
-
     val xs = (1 to 5).map(x => rng.nextDouble / 5)
     val xdist = new Dist(xs.map(fromProb(_)))
-
     val ys = (1 to 5).map(x => rng.nextDouble / 5)
     val ydist = new Dist(ys.map(fromProb(_)))
-
-    println(xdist)
     val results = Array.fill[Int](5)(0)    
     (1 to 10000).map(x => rng.nextDouble).map(x => results(xdist.sample(x)) += 1)
-    println(results.toList)
-
-
-    println(ydist)
     val results2 = Array.fill[Int](5)(0)    
     (1 to 10000).map(x => rng.nextDouble).map(x => results2(ydist.sample(x)) += 1)
-    println(results2.toList)
-
-    println(xdist * ydist)
-    println(xdist + ydist)
-
   }
 
-  def morphology(config: String) = {
-  }
-  
   def main(args: Array[String]){
+    val level = Level.FINE
+    handler.setLevel(level)
+    logger.setLevel(level)
     type OptionMap = Map[Symbol, Any]
     if(args.length == 0) println(usage)
     val arglist = args.toList
@@ -193,12 +189,12 @@ object BHMM{
       def isSwitch(s : String) = (s(0) == '-')
       list match {
         case Nil => map
-        case "--config" :: value :: tail =>
-          nextOption(map ++ Map('config -> value), tail)
         case "--input" :: value :: tail =>
           nextOption(map ++ Map('input -> value), tail)
         case "--output" :: value :: tail =>
           nextOption(map ++ Map('output -> value), tail)
+
+	// unsupervised tagger
 	case "--markov" :: value :: tail =>
           nextOption(map ++ Map('markov -> value.toInt), tail)	  
 	case "--num-sentences" :: value :: tail =>
@@ -211,10 +207,48 @@ object BHMM{
 	  nextOption(map ++ Map('numSamples -> value.toInt), tail)
 	case "--transition-prior" :: value :: tail =>
 	  nextOption(map ++ Map('transitionPrior -> value.toDouble), tail)
+	case "--optimize-transition-prior" :: value :: tail =>
+	  nextOption(map ++ Map('optimizeTransitionPrior -> value.toInt), tail)
 	case "--emission-prior" :: value :: tail =>
 	  nextOption(map ++ Map('emissionPrior -> value.toDouble), tail)
+	case "--optimize-emission-prior" :: value :: tail =>
+	  nextOption(map ++ Map('optimizeEmissionPrior -> value.toInt), tail)
+
+	// adaptor grammar
+	case "--prefix-prior" :: value :: tail =>
+	  nextOption(map ++ Map('prefixPrior -> value.toDouble), tail)
+	case "--word-prior" :: value :: tail =>
+	  nextOption(map ++ Map('wordPrior -> value.toDouble), tail)
+	case "--suffix-prior" :: value :: tail =>
+	  nextOption(map ++ Map('suffixPrior -> value.toDouble), tail)
+	case "--sub-morph-prior" :: value :: tail =>
+	  nextOption(map ++ Map('subMorphPrior -> value.toDouble), tail)
+	case "--adapt-prior" :: value :: tail =>
+	  nextOption(map ++ Map('adaptPrior -> value.toDouble), tail)
+	case "--rule-dirichlet-prior" :: value :: tail =>
+	  nextOption(map ++ Map('ruleDirichletPrior -> value.toDouble), tail)
+	case "--word-params-prior" :: value :: tail =>
+	  nextOption(map ++ Map('wordParams -> value.toDouble), tail)
+	case "--multipleStems" :: tail =>
+	  nextOption(map ++ Map('multipleStems -> true), tail)
+	case "--prefixes" :: tail =>
+	  nextOption(map ++ Map('prefixes -> true), tail)
+	case "--suffixes" :: tail =>
+	  nextOption(map ++ Map('suffixes -> true), tail)
+	case "--subMorphs" :: tail =>
+	  nextOption(map ++ Map('subMorphs -> true), tail)
+	case "--nonParametric" :: tail =>
+	  nextOption(map ++ Map('nonParametric -> true), tail)
+
+	// evaluation methods
 	case "--perplexity" :: tail =>
 	  nextOption(map ++ Map('perplexity -> true), tail)
+	case "--variationOfInformation" :: tail =>
+	  nextOption(map ++ Map('perplexity -> true), tail)
+	case "--bestMatch" :: tail =>
+	  nextOption(map ++ Map('perplexity -> true), tail)
+
+	// other options
 	case "--help" :: tail =>
 	  println(usage)
 	  sys.exit(0)
@@ -234,15 +268,24 @@ object BHMM{
 				 'numBurnins -> 10,
 				 'numSamples -> 10,
 				 'transitionPrior -> .1,
+				 'optimizeTransitionPrior -> 0,
 				 'emissionPrior -> .1,
-				 'perplexity -> false), arglist)
-
-    val level = Level.FINE
-    handler.setLevel(level)
-    logger.setLevel(level)
+				 'optimizeEmissionPrior -> 0,
+				 'perplexity -> false,
+				 'prefixPrior -> .001,
+				 'wordPrior -> .001,
+				 'suffixPrior -> .001,
+				 'subMorphPrior -> .001,
+				 'adaptPrior -> 250.0,
+				 'ruleDirichletPrior -> .1,
+				 'wordParams -> 1,
+				 'multipleStems -> true,
+				 'prefixes -> true,
+				 'suffixes -> true,
+				 'subMorphs -> true,
+				 'nonParametric -> true), arglist)
 
     val printPerplexity = options.get('perplexity).get.asInstanceOf[Boolean]
-    val config = options.get('config).get.asInstanceOf[String]
     val input = options.get('input).get.asInstanceOf[String]
     val output = options.get('input).get.asInstanceOf[String]
     val markov = options.get('markov).get.asInstanceOf[Int]
@@ -250,13 +293,30 @@ object BHMM{
     val numTags = options.get('numTags).get.asInstanceOf[Int]
     val numBurnins = options.get('numBurnins).get.asInstanceOf[Int]
     val numSamples = options.get('numSamples).get.asInstanceOf[Int]
+    val optimizeEmissionPrior = options.get('optimizeEmissionPrior).get.asInstanceOf[Int]
+    val optimizeTransitionPrior = options.get('optimizeTransitionPrior).get.asInstanceOf[Int]
+
+    val prefixPrior = new PitmanYorPrior(0, options.get('prefixPrior).get.asInstanceOf[Double])
+    val wordPrior = new PitmanYorPrior(0, options.get('wordPrior).get.asInstanceOf[Double])
+    val suffixPrior = new PitmanYorPrior(0, options.get('suffixPrior).get.asInstanceOf[Double])
+    val subMorphPrior = new PitmanYorPrior(0, options.get('subMorphPrior).get.asInstanceOf[Double])
+    val adaptorPrior = new PitmanYorPrior(0, options.get('adaptPrior).get.asInstanceOf[Double])
     
+    val ruleDirichletPrior = options.get('ruleDirichletPrior).get.asInstanceOf[Double]
+    val wordParams = options.get('wordParams).get.asInstanceOf[Int]
+    val prefixes = options.get('prefixes).get.asInstanceOf[Boolean]
+    val suffixes = options.get('suffixes).get.asInstanceOf[Boolean]
+    val multipleStems = options.get('multipleStems).get.asInstanceOf[Boolean]
+    val subMorphs = options.get('subMorphs).get.asInstanceOf[Boolean]
+    val nonParametric = options.get('nonParametric).get.asInstanceOf[Boolean]
+
     val wordToIndex = scala.collection.mutable.Map[String, Int]()
     val tagToIndex = scala.collection.mutable.Map[String, Int]()
 
     val dataSet = parseInput(numSentences, numTags, markov, input, wordToIndex, tagToIndex)
     val indexToWord = wordToIndex.map(_.swap)
     val indexToTag = tagToIndex.map(_.swap)
+    val numGoldTags = tagToIndex.size
     def printWords(ixs : Seq[Int]) : Unit = { ixs.map(x => if(x != -1){print(indexToWord(x))}else{print(-1)}) }
     
     val numWords = wordToIndex.size
@@ -273,8 +333,20 @@ object BHMM{
     
     tagCounts(numTags) = dataSet.filter(x => x._2 == numTags).length
 
+    /*
+    val adaptorSet = new AdaptorSet
+    val settings = new Setting(prefixPrior, wordPrior, suffixPrior, subMorphPrior, adaptorPrior, ruleDirichletPrior, numTags, prefixes, suffixes, multipleStems, subMorphs, nonParametric)
+    val ruleSet = new RuleSet(settings)
+    val sampler = new AdaptorSampler(settings)
+    val adaptorBasedDataSet = new AdaptorBasedDataSet
+    adaptorBasedDataSet.initialSegmentation(settings, ruleSet, adaptorSet)
+    val writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(outputPath), "utf-8"))    
+    val writer2 = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(outputPath2), "utf-8"))      
+    AdaptorBasedDataSet adaptorBasedDataSet = TypeBasedDataReader.readAdaptorDataSet(inputPath)
+    */
+
     var transitionPriors = (0 to numTags).map(_ => options.get('transitionPrior).get.asInstanceOf[Double]).toArray
-    var emissionPriors = (0 to numWords).map(_ => options.get('emissionPrior).get.asInstanceOf[Double]).toArray
+    var emissionPriors = (0 to numWords - 1).map(_ => options.get('emissionPrior).get.asInstanceOf[Double]).toArray
 
     def evaluateOneToOne(data : DataSet) : Double = {
       val cm = Array.fill[Int](numTags, tagToIndex.size)(0)
@@ -291,8 +363,6 @@ object BHMM{
       fs.sum / fs.length
     }
 
-    morphology(config)
-    
     val rng = new scala.util.Random()
     
     def indexToHistory(i : Int, acc : Seq[Int] = Seq()) : Seq[Int] = {
@@ -351,12 +421,14 @@ object BHMM{
       def transitionDist(windows : Seq[Seq[Int]], offset : Int) : Dist = {
 	val primaryWindowTags = data.slice(windows(0).head, windows(0).last + 1).map(_._2)
 	val target = data(windows(0).last)
-	if(primaryWindowTags.count(_ == -1) > 1 || primaryWindowTags.last == numTags){ (1 to numTags).map(_ => fromProb(1.0 / numTags)) }else{
+	val res = if(primaryWindowTags.count(_ == -1) > 1 || primaryWindowTags.last == numTags){ (1 to numTags).map(_ => fromProb(1.0 / numTags)) }else{
 	  (0 to numTags - 1).map{ x =>
 	     data(windows(0).last) = (target._1, x, target._3)
 	     oneDensity(windows.take(x + 1))
 			       }
 	}
+	//logger.fine("%s".format(res))
+	res
       }
 
       def emissionDist(wordId : Int) : Dist = {
@@ -384,10 +456,43 @@ object BHMM{
 	    val tDists = (0 to windows.length - 1).map(x => transitionDist(windows.slice(0, x + 1), x))
 	    val fDist = tDists.fold(eDist)(times)
 	    val newTag = fDist.sample(rng.nextDouble)
+	    logger.finest("assigning new tag %d".format(newTag))
 	    data(index) = (wordId, newTag, goldTagId)	    
 	    crement(index, 1)
 	}
       }
+
+      def entropy(as : Seq[Int]) : Double = {
+	val total = as.length
+	val cts = as.distinct.map(x => as.count(y => y == x))
+	val dist = new Dist(cts.map(t => fromProb(t.toDouble / total)))
+	-dist.ps.filter(x => x.l != Double.NaN && x.l != Double.NegativeInfinity).map(x => x.p * x.l).sum
+      }
+
+      def mutualInformation(aas : Seq[Int], bas : Seq[Int]) : Double = {
+	val total = aas.length
+	val combined = aas.zip(bas)
+	assert(total == bas.length)
+	val aCounts = aas.distinct.map(x => (x, aas.count(y => y == x))).toMap
+	val bCounts = bas.distinct.map(x => (x, bas.count(y => y == x))).toMap
+	val abCounts = aCounts.keys.map(a => bCounts.keys.map(b => ((a, b), combined.count(_ == (a, b))))).flatten.toMap
+	val abProb = abCounts.mapValues(_ / total)
+	val aProb = aCounts.mapValues(_ / total)
+	val bProb = bCounts.mapValues(_ / total)
+	aProb.keys.filter(a => aProb(a) > 0.0).map(a => bProb.keys.filter(b => bProb(b) > 0.0).map{b =>
+	  abProb((a, b)) * logbase(abProb((a, b)) / (aProb(a) * bProb(b)))
+					 }).flatten.sum
+      }
+
+      def variationOfInformation() : Double = {
+	val total = wordCounts.sum
+	val hypothesis = data.filter(_._1 != -1).map(_._2)
+	val gold = data.filter(_._1 != -1).map(_._3)
+	val hypothesisEntropy = entropy(hypothesis)
+	val goldEntropy = entropy(gold)
+	hypothesisEntropy + goldEntropy - (2 * mutualInformation(hypothesis, gold))
+      }
+
 
       def perplexity() : Double = {
 	def wordDensity(i : Int, word : Int) : Prob = {	  
@@ -403,20 +508,54 @@ object BHMM{
 	val probs = (0 to data.length - 1).filter(data(_)._1 != -1).map(i => wordDensity(i, data(i)._1).l)
 	expbase(- probs.sum / probs.length)
       }
-
-      def variationOfInformation() : Double = {
-	1.0
+      
+      def symmetricOptimizeHyperParameters(parameters : Array[Double], groupByObsCounts : Array[Array[Int]], iterations : Int) : Unit = {
+	val numGroups = groupByObsCounts.length
+	val numObs = parameters.length
+	val currentSum = parameters.sum
+	val numerators = (0 to numObs - 1).map(o => groupByObsCounts.map(n => Gamma.digamma(n(o) + parameters(o))).sum - (numGroups * Gamma.digamma(parameters(o))))
+	val denominator = groupByObsCounts.map(n => Gamma.digamma(n.sum + currentSum)).sum - (numGroups * Gamma.digamma(currentSum))
+	val update = numerators.zipWithIndex.map(x => parameters(x._2) * x._1 / denominator)
+	(0 to numObs - 1).map(o => parameters(o) = update(o) + .00001)
+	if(iterations <= 0){ logger.finer("post-optimization: %s".format(parameters.toList)) }else{ optimizeHyperParameters(parameters, groupByObsCounts, iterations - 1) }
       }
 
-      def optimizeHyperParameters(parameters : Array[Double], counts : Array[Array[Int]], sumCounts : Array[Int]) : Unit = {
-	logger.finer("pre-optimization: %s".format(parameters.toList))
-	logger.finer("post-optimization: %s".format(parameters.toList))
+      def optimizeHyperParameters(parameters : Array[Double], groupByObsCounts : Array[Array[Int]], iterations : Int) : Unit = {
+	val numGroups = groupByObsCounts.length
+	val numObs = parameters.length
+	val currentSum = parameters.sum
+	val numerators = (0 to numObs - 1).map(o => groupByObsCounts.map(n => Gamma.digamma(n(o) + parameters(o))).sum - (numGroups * Gamma.digamma(parameters(o))))
+	val denominator = groupByObsCounts.map(n => Gamma.digamma(n.sum + currentSum)).sum - (numGroups * Gamma.digamma(currentSum))
+	val update = numerators.zipWithIndex.map(x => parameters(x._2) * x._1 / denominator)
+	(0 to numObs - 1).map(o => parameters(o) = update(o) + .00001)
+	if(iterations <= 0){ logger.finer("post-optimization: %s".format(parameters.toList)) }else{ optimizeHyperParameters(parameters, groupByObsCounts, iterations - 1) }
       }
 
       (0 to data.length - 1).map(oneSample(_))
-      optimizeHyperParameters(transitionPriors, historyByTag, historyCounts)
-      optimizeHyperParameters(emissionPriors, tagByWord, tagCounts)
       logger.fine("tag counts: %s".format(tagCounts.toList))
+
+      optimizeTransitionPrior match{
+	case 1 => 
+	  symmetricOptimizeHyperParameters(transitionPriors, historyByTag, 10)
+	  logger.fine("optimized symmetric transition priors: average = %f".format(transitionPriors.sum / transitionPriors.length))
+	case 2 => 
+	  optimizeHyperParameters(transitionPriors, historyByTag, 10)
+	  logger.fine("optimized asymmetric transition priors: average = %f".format(transitionPriors.sum / transitionPriors.length))
+	case _ =>
+	  Unit
+      }
+
+      optimizeEmissionPrior match{
+	case 1 => 
+	  symmetricOptimizeHyperParameters(emissionPriors, historyByTag, 10)
+	  logger.fine("optimized symmetric emission priors: average = %f".format(emissionPriors.sum / emissionPriors.length))
+	case 2 => 
+	  optimizeHyperParameters(emissionPriors, historyByTag, 10)
+	  logger.fine("optimized asymmetric emission priors: average = %f".format(emissionPriors.sum / emissionPriors.length))
+	case _ =>
+	  Unit
+      }
+
       logger.fine("Perplexity: %f".format(perplexity()))
       logger.fine("Best-Match F-Score: %f".format(evaluateOneToOne(data)))
       logger.fine("Variation of Information: %f".format(variationOfInformation()))
