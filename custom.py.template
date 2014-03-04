@@ -1,4 +1,4 @@
-#MORPHOLOGY_PATH = "/home/tom/projects/jointmorphologytagger"
+#MORPHOLOGY_PATH = False
 #NUM_SENTENCES = 100
 #NUM_TAGS = 17
 #NUM_BURNINS = 10

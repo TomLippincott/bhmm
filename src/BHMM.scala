@@ -25,6 +25,14 @@ import Parser.CKY
 
 object BHMM{  
 
+  def time[R](code : => R) : R = {
+    val t0 = System.nanoTime()
+    val result = code    // call-by-name
+    val t1 = System.nanoTime()
+    println("Elapsed time: " + (t1 - t0) + "ns")
+    result
+  }
+
   val coarseTags = Map("CONJ" -> Seq("CC"),
 		       "DET" -> Seq("DT", "PDT"),
 		       "INPUNC" -> Seq("$", ",", ":", "LS", "SYM", "UH"),
@@ -63,8 +71,8 @@ object BHMM{
    * BEGIN Probability
    */  
 
-  val base = 10
-  def logbase(x: Double) = scala.math.log(x)/scala.math.log(base)
+  val base = 2
+  def logbase(x: Double) = scala.math.log(x) / scala.math.log(base)
   def expbase(x: Double) = scala.math.pow(base.toDouble, x)
 
   def fromProb(x : Double) : Prob = new Prob(logbase(x))
@@ -126,8 +134,29 @@ object BHMM{
    * END Probability
    */
 
-  val usage = """
-  All arguments are optional:
+  def indexToHistory(i : Int, markov : Int, possibleValues : Int, acc : Seq[Int] = Seq()) : Seq[Int] = {
+    i match{
+      case 0 =>
+	if(acc.length < markov){ indexToHistory(0, markov, possibleValues, 0 +: acc) }else{ acc }
+      case _ =>
+	val c = scala.math.pow(possibleValues.toDouble, markov - acc.length - 1).toInt
+	val d = i / c
+	indexToHistory(i - (c * d), markov, possibleValues, d +: acc)
+    }
+  }
+    
+  def historyToIndex(history : Seq[Int], possibleValues : Int) : Int = {
+    logger.finest("history: %s".format(history))
+    val i = history.zipWithIndex.map(x => x._1 * scala.math.pow(possibleValues.toDouble, x._2.toDouble)).sum.toInt
+    logger.finest("index: %s".format(i))
+    i
+  }
+
+  def numHistories(markov : Int, possibleValues : Int) : Int = math.pow(possibleValues.toDouble, markov.toDouble).toInt
+
+  val usage = ""
+  /*
+  All arguments besides input and output are optional:
     --config
     --input
     --output
@@ -140,6 +169,7 @@ object BHMM{
     --emission-prior
     --help
   """
+  */
 
   type Location = Tuple3[Int, Int, Int]
   type Lookup = scala.collection.mutable.Map[String, Int]
@@ -163,19 +193,50 @@ object BHMM{
       (0 until markov).map(_ => nullLoc) ++ line.split(" ").map(parseLocation(_))
     }
     val src = io.Source.fromInputStream(new GZIPInputStream(new BufferedInputStream(new FileInputStream(filename))))
-    collection.mutable.ArraySeq[Location](src.getLines().take(numLines).map(parseSentence(_)).toList.flatten.++(end).toArray : _*)
+    collection.mutable.ArraySeq[Location](src.getLines().take(numLines).map(parseSentence(_)).toList.flatten.++(end).toArray : _*) ++ (0 until markov).map(_ => nullLoc)
   }
 
   def runTests = {
+
     val rng = new scala.util.Random()
-    val xs = (1 to 5).map(x => rng.nextDouble / 5)
-    val xdist = new Dist(xs.map(fromProb(_)))
-    val ys = (1 to 5).map(x => rng.nextDouble / 5)
-    val ydist = new Dist(ys.map(fromProb(_)))
-    val results = Array.fill[Int](5)(0)    
-    (1 to 10000).map(x => rng.nextDouble).map(x => results(xdist.sample(x)) += 1)
-    val results2 = Array.fill[Int](5)(0)    
-    (1 to 10000).map(x => rng.nextDouble).map(x => results2(ydist.sample(x)) += 1)
+
+    // test the history-to-index mechanisms, with 20 tags (20 + 1, including the null tag)
+    (1 to 3).map { m =>
+      val n = numHistories(m, 20 + 1)
+      logger.fine("markov=%d, tags=%d, histories=%d".format(m, 20, n))
+      (0 to n - 1).map { i =>
+	val h = indexToHistory(i, m, 20 + 1)
+	val ii = historyToIndex(h, 21)
+	val hh = indexToHistory(ii, m, 20 + 1)
+	assert(i == ii && h == hh && h.length == m && hh.length == m)
+      }
+    }
+
+    // test the log-probability mechanisms
+    val xsa = (1 to 4).map(x => rng.nextDouble)
+    val psa = xsa.map(_ / xsa.sum)
+    val lpsa = ProbSeqToDist(psa.map(fromProb(_)))
+    logger.fine("distribution A: %s".format(lpsa))
+    val resultsa = Array.fill[Int](4)(0)    
+    (1 to 10000).map(x => rng.nextDouble).map(x => resultsa(lpsa.sample(x)) += 1)
+    logger.fine("samples A: %s".format(resultsa.toList))
+
+    val xsb = (1 to 4).map(x => rng.nextDouble)
+    val psb = xsb.map(_ / xsb.sum)
+    val lpsb = ProbSeqToDist(psb.map(fromProb(_)))
+    logger.fine("distribution B: %s".format(lpsb))
+    val resultsb = Array.fill[Int](4)(0)    
+    (1 to 10000).map(x => rng.nextDouble).map(x => resultsb(lpsb.sample(x)) += 1)
+    logger.fine("samples B: %s".format(resultsb.toList))
+
+    val lpsab = lpsa * lpsb
+    logger.fine("distribution A * B: %s".format(lpsab))
+    val lpsba = lpsb * lpsa
+    logger.fine("distribution B * A: %s".format(lpsba))
+    val resultsab = Array.fill[Int](4)(0)    
+    (1 to 10000).map(x => rng.nextDouble).map(x => resultsab(lpsab.sample(x)) += 1)
+    logger.fine("samples A * B: %s".format(resultsab.toList))
+
   }
 
   def main(args: Array[String]){
@@ -194,7 +255,7 @@ object BHMM{
         case "--output" :: value :: tail =>
           nextOption(map ++ Map('output -> value), tail)
 
-	// unsupervised tagger
+	// options for unsupervised tagger
 	case "--markov" :: value :: tail =>
           nextOption(map ++ Map('markov -> value.toInt), tail)	  
 	case "--num-sentences" :: value :: tail =>
@@ -208,13 +269,13 @@ object BHMM{
 	case "--transition-prior" :: value :: tail =>
 	  nextOption(map ++ Map('transitionPrior -> value.toDouble), tail)
 	case "--optimize-transition-prior" :: value :: tail =>
-	  nextOption(map ++ Map('optimizeTransitionPrior -> value.toInt), tail)
+	  nextOption(map ++ Map('optimizeTransitionPrior -> value), tail)
 	case "--emission-prior" :: value :: tail =>
 	  nextOption(map ++ Map('emissionPrior -> value.toDouble), tail)
 	case "--optimize-emission-prior" :: value :: tail =>
-	  nextOption(map ++ Map('optimizeEmissionPrior -> value.toInt), tail)
+	  nextOption(map ++ Map('optimizeEmissionPrior -> value), tail)
 
-	// adaptor grammar
+	// options for adaptor grammar morphology
 	case "--prefix-prior" :: value :: tail =>
 	  nextOption(map ++ Map('prefixPrior -> value.toDouble), tail)
 	case "--word-prior" :: value :: tail =>
@@ -240,13 +301,13 @@ object BHMM{
 	case "--nonParametric" :: tail =>
 	  nextOption(map ++ Map('nonParametric -> true), tail)
 
-	// evaluation methods
-	case "--perplexity" :: tail =>
-	  nextOption(map ++ Map('perplexity -> true), tail)
-	case "--variationOfInformation" :: tail =>
-	  nextOption(map ++ Map('perplexity -> true), tail)
-	case "--bestMatch" :: tail =>
-	  nextOption(map ++ Map('perplexity -> true), tail)
+	// options for evaluation methods
+	case "--perplexity" :: value :: tail =>
+	  nextOption(map ++ Map('perplexity -> value.toInt), tail)
+	case "--variation-of-information" :: value :: tail =>
+	  nextOption(map ++ Map('variationOfInformation -> value.toInt), tail)
+	case "--best-match" :: value :: tail =>
+	  nextOption(map ++ Map('bestMatch -> value.toInt), tail)
 
 	// other options
 	case "--help" :: tail =>
@@ -256,7 +317,7 @@ object BHMM{
 	  runTests
 	  sys.exit(0)
         case option :: tail => 
-	  println("Unknown option "+option)
+	  println("Unknown option " + option)
 	  println(usage)
 	  sys.exit(1) 
       }      
@@ -268,10 +329,12 @@ object BHMM{
 				 'numBurnins -> 10,
 				 'numSamples -> 10,
 				 'transitionPrior -> .1,
-				 'optimizeTransitionPrior -> 0,
+				 'optimizeTransitionPrior -> "no",
 				 'emissionPrior -> .1,
-				 'optimizeEmissionPrior -> 0,
-				 'perplexity -> false,
+				 'optimizeEmissionPrior -> "no",
+				 'perplexity -> 0,
+				 'bestMatch -> 0,
+				 'variationOfInformation -> 0,
 				 'prefixPrior -> .001,
 				 'wordPrior -> .001,
 				 'suffixPrior -> .001,
@@ -285,16 +348,18 @@ object BHMM{
 				 'subMorphs -> true,
 				 'nonParametric -> true), arglist)
 
-    val printPerplexity = options.get('perplexity).get.asInstanceOf[Boolean]
+    val printPerplexity = options.get('perplexity).get.asInstanceOf[Int]
+    val printVariationOfInformation = options.get('variationOfInformation).get.asInstanceOf[Int]
+    val printBestMatch = options.get('bestMatch).get.asInstanceOf[Int]
     val input = options.get('input).get.asInstanceOf[String]
-    val output = options.get('input).get.asInstanceOf[String]
+    val output = options.get('output).get.asInstanceOf[String]
     val markov = options.get('markov).get.asInstanceOf[Int]
     val numSentences = options.get('numSentences).get.asInstanceOf[Int]
     val numTags = options.get('numTags).get.asInstanceOf[Int]
     val numBurnins = options.get('numBurnins).get.asInstanceOf[Int]
     val numSamples = options.get('numSamples).get.asInstanceOf[Int]
-    val optimizeEmissionPrior = options.get('optimizeEmissionPrior).get.asInstanceOf[Int]
-    val optimizeTransitionPrior = options.get('optimizeTransitionPrior).get.asInstanceOf[Int]
+    val optimizeEmissionPrior = options.get('optimizeEmissionPrior).get.asInstanceOf[String]
+    val optimizeTransitionPrior = options.get('optimizeTransitionPrior).get.asInstanceOf[String]
 
     val prefixPrior = new PitmanYorPrior(0, options.get('prefixPrior).get.asInstanceOf[Double])
     val wordPrior = new PitmanYorPrior(0, options.get('wordPrior).get.asInstanceOf[Double])
@@ -323,6 +388,7 @@ object BHMM{
     val numHistories = scala.math.pow((numTags.toDouble + 1), markov.toDouble).toInt
     
     val tagByWord = Array.fill[Int](numTags, numWords)(0)
+    val samples = Array.fill[Int](numSamples, numTags, numWords)(0)
     val historyByTag = Array.fill[Int](numHistories, numTags + 1)(0)
     val historyCounts = Array.fill[Int](numHistories)(0)
     val tagCounts = Array.fill[Int](numTags + 1)(0)
@@ -365,25 +431,8 @@ object BHMM{
 
     val rng = new scala.util.Random()
     
-    def indexToHistory(i : Int, acc : Seq[Int] = Seq()) : Seq[Int] = {
-      i match{
-	case 0 =>
-	  if(acc.length < markov){ indexToHistory(0, 0 +: acc) }else{ acc }
-	case _ =>
-	  val c = scala.math.pow(numTags.toDouble + 1, markov - acc.length - 1).toInt
-	  val d = i / c
-	  indexToHistory(i - (c * d), d +: acc)
-      }
-    }
     
-    def historyToIndex(history: Seq[Int]) : Int = {
-      logger.finest("history: %s".format(history))
-      val i = history.zipWithIndex.map(x => x._1 * scala.math.pow(numTags.toDouble + 1, x._2.toDouble)).sum.toInt
-      logger.finest("index: %s".format(i))
-      i
-    }
-    
-    def fullSample(data : DataSet) : Unit = {
+    def fullSample(data : DataSet, number : Int) : Unit = {
       def crement(index : Int, amount : Int) : Unit = {
 	data(index) match{
 	  case (-1, _, _) => logger.finest("no word here, so no emission adjustment")
@@ -397,7 +446,7 @@ object BHMM{
 
 	val windows = (index - markov to math.min(data.length - 1, index + markov)).sliding(markov + 1).toList
 	val wTags = windows.map(w => w.map(data(_)._2)).filter(x => x.count(_ == -1) == 0)
-	val htPairs = wTags.map(x => (historyToIndex(x.take(markov)), x.last))
+	val htPairs = wTags.map(x => (historyToIndex(x.take(markov), numTags + 1), x.last))
 	htPairs.map(x => logger.finest("adjusting history=%s, tag=%s count by %d".format(x._1, x._2, amount)))
 	htPairs.map(x => (historyCounts(x._1) += amount, historyByTag(x._1)(x._2) += amount))
       }
@@ -406,7 +455,7 @@ object BHMM{
 	logger.finest("windows: %s".format(windows))
 	val locations = windows.map(w => w.map(data(_)))
 	logger.finest("locations: %s".format(locations))
-	val contexts = windows.map(w => w.map(data(_)._2)).map(x => (historyToIndex(x.take(markov)), x.last))
+	val contexts = windows.map(w => w.map(data(_)._2)).map(x => (historyToIndex(x.take(markov), numTags + 1), x.last))
 	if(contexts.last._2 == -1 || contexts.last._2 == numTags){
 	  fromProb(1.0 / numTags)
 	}else{
@@ -496,7 +545,7 @@ object BHMM{
 
       def perplexity() : Double = {
 	def wordDensity(i : Int, word : Int) : Prob = {	  
-	  val history = historyToIndex(data.slice(i - markov, i).map(_._2))
+	  val history = historyToIndex(data.slice(i - markov, i).map(_._2), numTags + 1)
 	  val transDist = (0 to numTags - 1).map(tag => fromProb((historyByTag(history)(tag) + transitionPriors(tag)) / (historyCounts(history) + transitionPriors.sum)) *  
 					                fromProb((tagByWord(tag)(word) + emissionPriors(word)) / (tagCounts(tag) + emissionPriors.sum)))
 	  val d = transDist.drop(1).fold(transDist(0))((x, y) => x + y)
@@ -510,14 +559,20 @@ object BHMM{
       }
       
       def symmetricOptimizeHyperParameters(parameters : Array[Double], groupByObsCounts : Array[Array[Int]], iterations : Int) : Unit = {
+	val currentValue = parameters.sum / parameters.length
 	val numGroups = groupByObsCounts.length
-	val numObs = parameters.length
-	val currentSum = parameters.sum
-	val numerators = (0 to numObs - 1).map(o => groupByObsCounts.map(n => Gamma.digamma(n(o) + parameters(o))).sum - (numGroups * Gamma.digamma(parameters(o))))
-	val denominator = groupByObsCounts.map(n => Gamma.digamma(n.sum + currentSum)).sum - (numGroups * Gamma.digamma(currentSum))
-	val update = numerators.zipWithIndex.map(x => parameters(x._2) * x._1 / denominator)
-	(0 to numObs - 1).map(o => parameters(o) = update(o) + .00001)
-	if(iterations <= 0){ logger.finer("post-optimization: %s".format(parameters.toList)) }else{ optimizeHyperParameters(parameters, groupByObsCounts, iterations - 1) }
+	val numObs = parameters.length	
+	val groupCounts = groupByObsCounts.map(_.sum)
+	assert(numObs == groupByObsCounts(0).length)
+	val numeratorA = (0 to numObs - 1).map(o => (0 to numGroups - 1).map(g => Gamma.digamma(groupByObsCounts(g)(o) + currentValue))).flatten.sum
+	val numeratorB = numGroups * numObs * Gamma.digamma(currentValue)
+	val numerator = currentValue * (numeratorA - numeratorB)
+	val denominatorA = groupCounts.map(x => Gamma.digamma(x + numObs * currentValue)).sum
+	val denominatorB = numGroups * Gamma.digamma(numObs * currentValue)
+	val denominator = numObs * (denominatorA - denominatorB)
+	val newValue = currentValue * (numerator / denominator) + .00001
+	(0 to numObs - 1).map(o => parameters(o) = newValue)
+	if(iterations <= 0){ Unit }else{ symmetricOptimizeHyperParameters(parameters, groupByObsCounts, iterations - 1) }
       }
 
       def optimizeHyperParameters(parameters : Array[Double], groupByObsCounts : Array[Array[Int]], iterations : Int) : Unit = {
@@ -533,47 +588,51 @@ object BHMM{
 
       (0 to data.length - 1).map(oneSample(_))
       logger.fine("tag counts: %s".format(tagCounts.toList))
+      val optimizeIterations = 200
 
       optimizeTransitionPrior match{
-	case 1 => 
-	  symmetricOptimizeHyperParameters(transitionPriors, historyByTag, 10)
-	  logger.fine("optimized symmetric transition priors: average = %f".format(transitionPriors.sum / transitionPriors.length))
-	case 2 => 
-	  optimizeHyperParameters(transitionPriors, historyByTag, 10)
+	case "symmetric" => 
+	  symmetricOptimizeHyperParameters(transitionPriors, historyByTag, optimizeIterations)
+	  logger.fine("optimized symmetric transition priors: %d x %f".format(transitionPriors.length, transitionPriors.sum / transitionPriors.length))
+	case "asymmetric" => 
+	  optimizeHyperParameters(transitionPriors, historyByTag, optimizeIterations)
 	  logger.fine("optimized asymmetric transition priors: average = %f".format(transitionPriors.sum / transitionPriors.length))
 	case _ =>
 	  Unit
       }
 
       optimizeEmissionPrior match{
-	case 1 => 
-	  symmetricOptimizeHyperParameters(emissionPriors, historyByTag, 10)
-	  logger.fine("optimized symmetric emission priors: average = %f".format(emissionPriors.sum / emissionPriors.length))
-	case 2 => 
-	  optimizeHyperParameters(emissionPriors, historyByTag, 10)
+	case "symmetric" => 
+	  symmetricOptimizeHyperParameters(emissionPriors, tagByWord, optimizeIterations)
+	  logger.fine("optimized symmetric emission priors: %d x %f".format(emissionPriors.length, emissionPriors.sum / emissionPriors.length))
+	case "asymmetric" => 
+	  optimizeHyperParameters(emissionPriors, tagByWord, optimizeIterations)
 	  logger.fine("optimized asymmetric emission priors: average = %f".format(emissionPriors.sum / emissionPriors.length))
 	case _ =>
 	  Unit
       }
-
-      logger.fine("Perplexity: %f".format(perplexity()))
-      logger.fine("Best-Match F-Score: %f".format(evaluateOneToOne(data)))
-      logger.fine("Variation of Information: %f".format(variationOfInformation()))
+      if(printPerplexity > 0 && number % printPerplexity == 0) logger.fine("Perplexity: %f".format(perplexity()))
+      if(printBestMatch > 0 && number % printBestMatch == 0) logger.fine("Best-Match F-Score: %f".format(evaluateOneToOne(data)))
+      if(printVariationOfInformation > 0 && number % printVariationOfInformation == 0) logger.fine("Variation of Information: %f".format(variationOfInformation()))
     }
 
     for(i <- 1 until numBurnins + 1){
       logger.fine("burnin #%d".format(i))
-      fullSample(dataSet)
-      val totals = tagByWord.map(_.fold(0)((x, y) => y + x))
+      fullSample(dataSet, i)
     }
     for(i <- 1 until numSamples + 1){
       logger.fine("sample #%d".format(i))
-      fullSample(dataSet)
-      val totals = tagByWord.map(_.fold(0)((x, y) => y + x))
+      fullSample(dataSet, i + numBurnins)
+      samples(i - 1) = tagByWord
     }
-    tagByWord.map(printTopic(_))
+    val summedTagByWord = Array.fill[Int](numTags, numWords)(0)
+    (0 to numTags - 1).map(t => (0 to numWords - 1).map(w => (0 to numSamples - 1).map(s => summedTagByWord(t)(w) += samples(s)(t)(w))))
+    val wordTotals = (0 to numWords - 1).map(w => summedTagByWord.map(_(w)).sum)
+
+    summedTagByWord.map(printTopic(_))
+
     def printTopic(row : Seq[Int], count : Int = 10) : Unit = {
-      logger.info("%s".format(row.zip(0 to row.size).sorted.reverse.toList.filter(_._1 > 0).map(x => (indexToWord(x._2), x._1, wordCounts(x._2))).take(count)))
+      logger.info("%s".format(row.zip(0 to row.size).sorted.reverse.toList.filter(_._1 > 0).map(x => (indexToWord(x._2), x._1, wordTotals(x._2))).take(count)))
     }
   }
 }
