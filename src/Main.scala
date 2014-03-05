@@ -1,58 +1,19 @@
-import org.apache.commons.math3.special.Gamma
-import java.io.File
-import Accessories._
-import java.io._
+package bhmm
+
 import java.util.HashMap
 import java.util.Vector
 import java.util.Date
-import java.util.zip._
 import java.util.logging._
-import AdaptorGrammar.AdaptorSet
-import AdaptorGrammar.RuleSet
-import AdaptorGrammar.PitmanYorPrior
-import Sampler.AdaptorSampler
-import Data.Setting
-import Data.AdaptorBasedDataSet
+import bhmm.Probability._
+import bhmm.Dirichlet._
+import bhmm.Types._
+import bhmm.Utilities._
+import bhmm.Test._
+import bhmm.DataSet._
+import bhmm.Metrics._
+import bhmm.Morphology._
 
-/*
-import CFG.NonTerminal
-import CFG.Rule
-import CFG.RuleRightHand
-import CFG.Terminal
-import Data._
-import Parser.CKY
-*/
-
-object BHMM{  
-
-  def time[R](code : => R) : R = {
-    val t0 = System.nanoTime()
-    val result = code    // call-by-name
-    val t1 = System.nanoTime()
-    println("Elapsed time: " + (t1 - t0) + "ns")
-    result
-  }
-
-  val coarseTags = Map("CONJ" -> Seq("CC"),
-		       "DET" -> Seq("DT", "PDT"),
-		       "INPUNC" -> Seq("$", ",", ":", "LS", "SYM", "UH"),
-		       "ENDPUNC" -> Seq("."),
-		       "LPUNC" -> Seq("-LRB-", "``"),
-		       "POS" -> Seq("POS"),
-		       "PRT" -> Seq("RP"),
-		       "TO" -> Seq("TO"),
-		       "PREP" -> Seq("IN"),
-		       "RPUNC" -> Seq("-RRB-", "''"),
-		       "W" -> Seq("WDT", "WP$", "WP", "WRB"),
-		       // open-class
-		       "V" -> Seq("MD", "VBD", "VBP", "VB", "VBZ"),
-		       "ADJ" -> Seq("CD", "JJ", "JJR", "JJS", "PRP$"),
-		       "VBG" -> Seq("VBG"),
-		       "ADV" -> Seq("RB", "RBR", "RBS"),
-		       "N" -> Seq("EX", "FW", "NN", "NNP", "NNPS", "NNS", "PRP"),
-		       "VBN" -> Seq("VBN"))
-
-  val fineToCoarseTag = coarseTags.map(x => x._2.map((_, x._1))).fold(Seq())((x, y) => x ++ y).toMap
+object Main{  
 
   class MyFormatter extends Formatter{
     def format(r : LogRecord) : String = {
@@ -67,93 +28,6 @@ object BHMM{
   logger.setUseParentHandlers(false)
   logger.addHandler(handler)
   
-  /*
-   * BEGIN Probability
-   */  
-
-  val base = 2
-  def logbase(x: Double) = scala.math.log(x) / scala.math.log(base)
-  def expbase(x: Double) = scala.math.pow(base.toDouble, x)
-
-  def fromProb(x : Double) : Prob = new Prob(logbase(x))
-  def fromLog(x : Double) : Prob = new Prob(x)
-
-  class Prob(val l : Double) extends Ordered[Prob]{
-    def compare(that : Prob) = if(this.l - that.l < 0){ -1 }else if(this.l == that.l){ 0 }else{ 1 }
-    def p = expbase(l)
-    def *(y : Prob) : Prob = fromLog(l + y.l)
-    def /(y : Prob) : Prob = fromLog(l - y.l)
-    def inverse = fromProb(1.0) / this
-    def +(y : Prob) : Prob = {
-      def go(a : Double, b : Double) : Prob = {
-	val d = a - b
-	if(d < -20){ fromLog(b) }else{ fromLog(b + logbase(1.0 + expbase(d))) }
-      }
-      if(l < y.l){
-	go(l, y.l) 
-      }
-      else{ 
-	go(y.l, l) 
-      }
-    }
-    override def toString = "Prob(%f/%s)".format(p, if(l == Double.NegativeInfinity){ "-" }else{ "%f".format(l) })
-  }
-
-  class Dist(vs : Seq[Prob]){
-    val scale = new Prob(vs.tail.fold(vs.head)((x, y) => x + y).l).inverse
-    def ps = vs.map(x => x * scale)
-    def sample(d : Double) : Int = {
-      val p = fromProb(d)
-      val ms = ps.tail.scanLeft(ps.head)((x, y) => x + y)
-      val v = ms.indexWhere((x => p <= x))
-      logger.finer("sampled %d: %s %s".format(v, p, ms))
-      assert(v < vs.length)
-      v
-    }
-    def *(ys : Dist) : Dist = {
-      ps.zip(ys.ps).map(x => x._1 * x._2)
-    }
-    def +(ys : Dist) : Dist = {
-      ps.zip(ys.ps).map(x => x._1 + x._2)
-    }
-    override def toString = "Dist(%s)".format(ps)
-  }
-  
-  def times(a : Dist, b : Dist) : Dist = {
-    a * b
-  }
-
-  def sum(a : Dist, b : Dist) : Dist = {
-    a + b
-  }
-
-  implicit def ProbSeqToDist(xs : Seq[Prob]) : Dist = new Dist(xs)
-  implicit def ProbArrayToDist(xs : Array[Prob]) : Dist = new Dist(xs)
-
-  /*
-   * END Probability
-   */
-
-  def indexToHistory(i : Int, markov : Int, possibleValues : Int, acc : Seq[Int] = Seq()) : Seq[Int] = {
-    i match{
-      case 0 =>
-	if(acc.length < markov){ indexToHistory(0, markov, possibleValues, 0 +: acc) }else{ acc }
-      case _ =>
-	val c = scala.math.pow(possibleValues.toDouble, markov - acc.length - 1).toInt
-	val d = i / c
-	indexToHistory(i - (c * d), markov, possibleValues, d +: acc)
-    }
-  }
-    
-  def historyToIndex(history : Seq[Int], possibleValues : Int) : Int = {
-    logger.finest("history: %s".format(history))
-    val i = history.zipWithIndex.map(x => x._1 * scala.math.pow(possibleValues.toDouble, x._2.toDouble)).sum.toInt
-    logger.finest("index: %s".format(i))
-    i
-  }
-
-  def numHistories(markov : Int, possibleValues : Int) : Int = math.pow(possibleValues.toDouble, markov.toDouble).toInt
-
   val usage = ""
   /*
   All arguments besides input and output are optional:
@@ -171,73 +45,7 @@ object BHMM{
   """
   */
 
-  type Location = Tuple3[Int, Int, Int]
-  type Lookup = scala.collection.mutable.Map[String, Int]
-  type VectorCounts = scala.collection.mutable.ArraySeq[Double]
-  type Counts = scala.collection.mutable.ArraySeq[VectorCounts]  
-  type DataSet = scala.collection.mutable.ArraySeq[Location]
 
-  def parseInput(numLines: Int, numTags : Int, markov: Int, filename: String, wordLookup: Lookup, tagLookup: Lookup) : DataSet = {
-    val nullLoc = (-1, numTags, 0)
-    val end = (0 to markov - 1).map(_ => nullLoc)
-    def parseLocation(loc: String): Location = {
-      val toks = loc.split("/")
-      val word = toks.dropRight(1).mkString("/")
-      val tag = fineToCoarseTag(toks.last)
-      val wordId = if(wordLookup.contains(word)){ wordLookup(word) }else{ wordLookup += Tuple2(word, wordLookup.size); wordLookup(word) }
-      val goldTagId = if(tagLookup.contains(tag)){ tagLookup(tag) }else{ tagLookup += Tuple2(tag, tagLookup.size); tagLookup(tag) }
-      val tagId = -1
-      (wordId, tagId, goldTagId)
-    }
-    def parseSentence(line: String): Seq[Location] = {
-      (0 until markov).map(_ => nullLoc) ++ line.split(" ").map(parseLocation(_))
-    }
-    val src = io.Source.fromInputStream(new GZIPInputStream(new BufferedInputStream(new FileInputStream(filename))))
-    collection.mutable.ArraySeq[Location](src.getLines().take(numLines).map(parseSentence(_)).toList.flatten.++(end).toArray : _*) ++ (0 until markov).map(_ => nullLoc)
-  }
-
-  def runTests = {
-
-    val rng = new scala.util.Random()
-
-    // test the history-to-index mechanisms, with 20 tags (20 + 1, including the null tag)
-    (1 to 3).map { m =>
-      val n = numHistories(m, 20 + 1)
-      logger.fine("markov=%d, tags=%d, histories=%d".format(m, 20, n))
-      (0 to n - 1).map { i =>
-	val h = indexToHistory(i, m, 20 + 1)
-	val ii = historyToIndex(h, 21)
-	val hh = indexToHistory(ii, m, 20 + 1)
-	assert(i == ii && h == hh && h.length == m && hh.length == m)
-      }
-    }
-
-    // test the log-probability mechanisms
-    val xsa = (1 to 4).map(x => rng.nextDouble)
-    val psa = xsa.map(_ / xsa.sum)
-    val lpsa = ProbSeqToDist(psa.map(fromProb(_)))
-    logger.fine("distribution A: %s".format(lpsa))
-    val resultsa = Array.fill[Int](4)(0)    
-    (1 to 10000).map(x => rng.nextDouble).map(x => resultsa(lpsa.sample(x)) += 1)
-    logger.fine("samples A: %s".format(resultsa.toList))
-
-    val xsb = (1 to 4).map(x => rng.nextDouble)
-    val psb = xsb.map(_ / xsb.sum)
-    val lpsb = ProbSeqToDist(psb.map(fromProb(_)))
-    logger.fine("distribution B: %s".format(lpsb))
-    val resultsb = Array.fill[Int](4)(0)    
-    (1 to 10000).map(x => rng.nextDouble).map(x => resultsb(lpsb.sample(x)) += 1)
-    logger.fine("samples B: %s".format(resultsb.toList))
-
-    val lpsab = lpsa * lpsb
-    logger.fine("distribution A * B: %s".format(lpsab))
-    val lpsba = lpsb * lpsa
-    logger.fine("distribution B * A: %s".format(lpsba))
-    val resultsab = Array.fill[Int](4)(0)    
-    (1 to 10000).map(x => rng.nextDouble).map(x => resultsab(lpsab.sample(x)) += 1)
-    logger.fine("samples A * B: %s".format(resultsab.toList))
-
-  }
 
   def main(args: Array[String]){
     val level = Level.FINE
@@ -361,11 +169,6 @@ object BHMM{
     val optimizeEmissionPrior = options.get('optimizeEmissionPrior).get.asInstanceOf[String]
     val optimizeTransitionPrior = options.get('optimizeTransitionPrior).get.asInstanceOf[String]
 
-    val prefixPrior = new PitmanYorPrior(0, options.get('prefixPrior).get.asInstanceOf[Double])
-    val wordPrior = new PitmanYorPrior(0, options.get('wordPrior).get.asInstanceOf[Double])
-    val suffixPrior = new PitmanYorPrior(0, options.get('suffixPrior).get.asInstanceOf[Double])
-    val subMorphPrior = new PitmanYorPrior(0, options.get('subMorphPrior).get.asInstanceOf[Double])
-    val adaptorPrior = new PitmanYorPrior(0, options.get('adaptPrior).get.asInstanceOf[Double])
     
     val ruleDirichletPrior = options.get('ruleDirichletPrior).get.asInstanceOf[Double]
     val wordParams = options.get('wordParams).get.asInstanceOf[Int]
@@ -399,39 +202,11 @@ object BHMM{
     
     tagCounts(numTags) = dataSet.filter(x => x._2 == numTags).length
 
-    /*
-    val adaptorSet = new AdaptorSet
-    val settings = new Setting(prefixPrior, wordPrior, suffixPrior, subMorphPrior, adaptorPrior, ruleDirichletPrior, numTags, prefixes, suffixes, multipleStems, subMorphs, nonParametric)
-    val ruleSet = new RuleSet(settings)
-    val sampler = new AdaptorSampler(settings)
-    val adaptorBasedDataSet = new AdaptorBasedDataSet
-    adaptorBasedDataSet.initialSegmentation(settings, ruleSet, adaptorSet)
-    val writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(outputPath), "utf-8"))    
-    val writer2 = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(outputPath2), "utf-8"))      
-    AdaptorBasedDataSet adaptorBasedDataSet = TypeBasedDataReader.readAdaptorDataSet(inputPath)
-    */
-
     var transitionPriors = (0 to numTags).map(_ => options.get('transitionPrior).get.asInstanceOf[Double]).toArray
     var emissionPriors = (0 to numWords - 1).map(_ => options.get('emissionPrior).get.asInstanceOf[Double]).toArray
 
-    def evaluateOneToOne(data : DataSet) : Double = {
-      val cm = Array.fill[Int](numTags, tagToIndex.size)(0)
-      data.filter(x => x._1 != -1).map(x => cm(x._2)(x._3) += 1)
-      val learnedToGold = scala.collection.mutable.Map[Int, Int]()
-      val largest = cm.map{x => 
-	val numCorrect = x.max
-	val goldTag = x.indexWhere(_ == numCorrect)
-	val numGuesses = x.sum
-	val numTargets = cm.map(_(goldTag)).sum
-	(goldTag, numCorrect.toDouble, numGuesses.toDouble, numTargets.toDouble)
-			 }
-      val fs = largest.filter(x => x._3 > 0 && x._4 > 0).map(x => (x._2 / x._3, x._2 / x._4)).filter(x => x._1 > 0 && x._2 > 0).map(x => 2 * (x._1 * x._2) / (x._1 + x._2))
-      fs.sum / fs.length
-    }
-
     val rng = new scala.util.Random()
-    
-    
+        
     def fullSample(data : DataSet, number : Int) : Unit = {
       def crement(index : Int, amount : Int) : Unit = {
 	data(index) match{
@@ -511,38 +286,6 @@ object BHMM{
 	}
       }
 
-      def entropy(as : Seq[Int]) : Double = {
-	val total = as.length
-	val cts = as.distinct.map(x => as.count(y => y == x))
-	val dist = new Dist(cts.map(t => fromProb(t.toDouble / total)))
-	-dist.ps.filter(x => x.l != Double.NaN && x.l != Double.NegativeInfinity).map(x => x.p * x.l).sum
-      }
-
-      def mutualInformation(aas : Seq[Int], bas : Seq[Int]) : Double = {
-	val total = aas.length
-	val combined = aas.zip(bas)
-	assert(total == bas.length)
-	val aCounts = aas.distinct.map(x => (x, aas.count(y => y == x))).toMap
-	val bCounts = bas.distinct.map(x => (x, bas.count(y => y == x))).toMap
-	val abCounts = aCounts.keys.map(a => bCounts.keys.map(b => ((a, b), combined.count(_ == (a, b))))).flatten.toMap
-	val abProb = abCounts.mapValues(_ / total)
-	val aProb = aCounts.mapValues(_ / total)
-	val bProb = bCounts.mapValues(_ / total)
-	aProb.keys.filter(a => aProb(a) > 0.0).map(a => bProb.keys.filter(b => bProb(b) > 0.0).map{b =>
-	  abProb((a, b)) * logbase(abProb((a, b)) / (aProb(a) * bProb(b)))
-					 }).flatten.sum
-      }
-
-      def variationOfInformation() : Double = {
-	val total = wordCounts.sum
-	val hypothesis = data.filter(_._1 != -1).map(_._2)
-	val gold = data.filter(_._1 != -1).map(_._3)
-	val hypothesisEntropy = entropy(hypothesis)
-	val goldEntropy = entropy(gold)
-	hypothesisEntropy + goldEntropy - (2 * mutualInformation(hypothesis, gold))
-      }
-
-
       def perplexity() : Double = {
 	def wordDensity(i : Int, word : Int) : Prob = {	  
 	  val history = historyToIndex(data.slice(i - markov, i).map(_._2), numTags + 1)
@@ -558,33 +301,6 @@ object BHMM{
 	expbase(- probs.sum / probs.length)
       }
       
-      def symmetricOptimizeHyperParameters(parameters : Array[Double], groupByObsCounts : Array[Array[Int]], iterations : Int) : Unit = {
-	val currentValue = parameters.sum / parameters.length
-	val numGroups = groupByObsCounts.length
-	val numObs = parameters.length	
-	val groupCounts = groupByObsCounts.map(_.sum)
-	assert(numObs == groupByObsCounts(0).length)
-	val numeratorA = (0 to numObs - 1).map(o => (0 to numGroups - 1).map(g => Gamma.digamma(groupByObsCounts(g)(o) + currentValue))).flatten.sum
-	val numeratorB = numGroups * numObs * Gamma.digamma(currentValue)
-	val numerator = currentValue * (numeratorA - numeratorB)
-	val denominatorA = groupCounts.map(x => Gamma.digamma(x + numObs * currentValue)).sum
-	val denominatorB = numGroups * Gamma.digamma(numObs * currentValue)
-	val denominator = numObs * (denominatorA - denominatorB)
-	val newValue = currentValue * (numerator / denominator) + .00001
-	(0 to numObs - 1).map(o => parameters(o) = newValue)
-	if(iterations <= 0){ Unit }else{ symmetricOptimizeHyperParameters(parameters, groupByObsCounts, iterations - 1) }
-      }
-
-      def optimizeHyperParameters(parameters : Array[Double], groupByObsCounts : Array[Array[Int]], iterations : Int) : Unit = {
-	val numGroups = groupByObsCounts.length
-	val numObs = parameters.length
-	val currentSum = parameters.sum
-	val numerators = (0 to numObs - 1).map(o => groupByObsCounts.map(n => Gamma.digamma(n(o) + parameters(o))).sum - (numGroups * Gamma.digamma(parameters(o))))
-	val denominator = groupByObsCounts.map(n => Gamma.digamma(n.sum + currentSum)).sum - (numGroups * Gamma.digamma(currentSum))
-	val update = numerators.zipWithIndex.map(x => parameters(x._2) * x._1 / denominator)
-	(0 to numObs - 1).map(o => parameters(o) = update(o) + .00001)
-	if(iterations <= 0){ logger.finer("post-optimization: %s".format(parameters.toList)) }else{ optimizeHyperParameters(parameters, groupByObsCounts, iterations - 1) }
-      }
 
       (0 to data.length - 1).map(oneSample(_))
       logger.fine("tag counts: %s".format(tagCounts.toList))
@@ -611,9 +327,9 @@ object BHMM{
 	case _ =>
 	  Unit
       }
-      if(printPerplexity > 0 && number % printPerplexity == 0) logger.fine("Perplexity: %f".format(perplexity()))
-      if(printBestMatch > 0 && number % printBestMatch == 0) logger.fine("Best-Match F-Score: %f".format(evaluateOneToOne(data)))
-      if(printVariationOfInformation > 0 && number % printVariationOfInformation == 0) logger.fine("Variation of Information: %f".format(variationOfInformation()))
+      //if(printPerplexity > 0 && number % printPerplexity == 0) logger.fine("Perplexity: %f".format(perplexity()))
+      //if(printBestMatch > 0 && number % printBestMatch == 0) logger.fine("Best-Match F-Score: %f".format(evaluateGreedyOneToOne(data)))
+      //if(printVariationOfInformation > 0 && number % printVariationOfInformation == 0) logger.fine("Variation of Information: %f".format(variationOfInformation()))
     }
 
     for(i <- 1 until numBurnins + 1){

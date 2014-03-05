@@ -51,7 +51,7 @@ def scala_compile_generator(target, source, env, for_signature):
     return "scalac -cp work/classes:/usr/share/java/commons-math3.jar -d work/classes ${SOURCES}"
 
 def scala_compile_emitter(target, source, env):
-    new_sources = recursive_find(source[0].rstr(), r".*\.scala")
+    new_sources = recursive_find(source[0].rstr(), r".*\.scala$")
     new_targets = [re.sub(r"^[^\/]*", target[0].rstr(), x.replace(".scala", ".class")) for x in new_sources]
     return new_targets, new_sources
 
@@ -76,7 +76,7 @@ data = env.File("data/penn_wsj_tag_data.txt.gz")
 
 java_classes = env.Java(pjoin("work", "classes"), pjoin(env["MORPHOLOGY_PATH"], "src"))
 
-scala_classes = env.Scala(env.Dir(pjoin("work", "classes")), [env.Dir("src")] + java_classes)
+scala_classes = env.Scala(env.Dir(pjoin("work", "classes", "bhmm")), [env.Dir("src")] + java_classes)
 env.Depends(scala_classes, java_classes)
 
 mt = env.Jar(pjoin("work", "morphological_tagger.jar"), "work/classes", JARCHDIR="work/classes")
@@ -86,7 +86,7 @@ arguments = [("--%s" % x, "${%s}" % x.replace("-", "_").upper()) for x in ["mark
 if env["TEST"]:
    arguments.append(["--test"])
 
-output = env.RunScala("work/output.txt", [mt, env.Value("BHMM"), data],
+output = env.RunScala("work/output.txt", [mt, env.Value("bhmm.Main"), data],
                       ARGUMENTS=" ".join(sum(map(list, arguments), [])))
 env.Depends(output, mt)
 
