@@ -1,12 +1,12 @@
 package bhmm
 
-import bhmm.Types._
 import java.util.zip._
 import java.io.File
 import java.io._
+import java.util.logging._
 
 object Utilities{
-
+  val logger = Logger.getLogger(Utilities.getClass.getName)
   val coarseTags = Map("CONJ" -> Seq("CC"),
 		       "DET" -> Seq("DT", "PDT"),
 		       "INPUNC" -> Seq("$", ",", ":", "LS", "SYM", "UH"),

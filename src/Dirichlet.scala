@@ -1,8 +1,10 @@
 package bhmm
 
 import org.apache.commons.math3.special.Gamma
+import java.util.logging._
 
 object Dirichlet{
+  val logger = Logger.getLogger(Dirichlet.getClass.getName)
   def symmetricOptimizeHyperParameters(parameters : Array[Double], groupByObsCounts : Array[Array[Int]], iterations : Int) : Unit = {
     val currentValue = parameters.sum / parameters.length
     val numGroups = groupByObsCounts.length
@@ -20,7 +22,7 @@ object Dirichlet{
     if(iterations <= 0){ Unit }else{ symmetricOptimizeHyperParameters(parameters, groupByObsCounts, iterations - 1) }
   }
 
-  def optimizeHyperParameters(parameters : Array[Double], groupByObsCounts : Array[Array[Int]], iterations : Int) : Unit = {
+  def asymmetricOptimizeHyperParameters(parameters : Array[Double], groupByObsCounts : Array[Array[Int]], iterations : Int) : Unit = {
     val numGroups = groupByObsCounts.length
     val numObs = parameters.length
     val currentSum = parameters.sum
@@ -28,7 +30,7 @@ object Dirichlet{
     val denominator = groupByObsCounts.map(n => Gamma.digamma(n.sum + currentSum)).sum - (numGroups * Gamma.digamma(currentSum))
     val update = numerators.zipWithIndex.map(x => parameters(x._2) * x._1 / denominator)
     (0 to numObs - 1).map(o => parameters(o) = update(o) + .00001)
-    if(iterations <= 0){ Unit }else{ optimizeHyperParameters(parameters, groupByObsCounts, iterations - 1) }
+    if(iterations <= 0){ Unit }else{ asymmetricOptimizeHyperParameters(parameters, groupByObsCounts, iterations - 1) }
   }
 
 }
