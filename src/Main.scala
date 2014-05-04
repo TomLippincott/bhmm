@@ -6,7 +6,7 @@ import java.util.Date
 import java.util.logging._
 import bhmm.Test._
 import bhmm.data.DataSet
-import bhmm.models._
+import bhmm.models.{TokenBasedTaggingModel, TypeBasedTaggingModel, TokenBasedMorphologyModel, TypeBasedMorphologyModel, TokenBasedJointModel, TypeBasedJointModel}
 import bhmm.evaluation.Intrinsic
 import AdaptorGrammar.PitmanYorPrior
 import Distributions._
@@ -159,7 +159,8 @@ object Main{
 				 'wordPrior -> .001,
 				 'suffixPrior -> .001,
 				 'subMorphPrior -> .001,
-				 'adaptPrior -> 250.0,
+				 'adaptorPriorA -> 0.0,
+				 'adaptorPriorB -> 1.0,
 				 'ruleDirichletPrior -> .1,
 				 'wordParams -> 1,
 				 'multipleStems -> true,
@@ -167,13 +168,35 @@ object Main{
 				 'suffixes -> true,
 				 'subMorphs -> true,
 				 'nonParametric -> true,
-				 'typeBased -> true
+				 'typeBased -> true,
+				 'basePrior -> 1.0,
+				 'gammaPriorA -> 1.0,
+				 'gammaPriorB -> 1.0,
+				 'betaPriorA -> 1.0,
+				 'betaPriorB -> 1.0,
+				 'isPrefixAllowed -> false,
+				 'isSuffixAllowed -> false,
+				 'isSubMorphAllowed -> false,
+				 'isMultipleStemsAllowed -> false,
+				 'isNonParametric -> false,
+				 'isHierarchical -> false,
+				 'burnIn -> 0,
+				 'useHeuristics -> false,
+				 'isDerivational -> false,
+				 'isBatch -> false,
+				 'lexGen -> 1000,
+				 'inferePYP -> false,
+				 'w -> 1.0,
+				 'm -> 1.0,
+				 'tagPrior -> 1.0,
+				 'cachingProb -> 10
 			       ), arglist)
 
+
     val output = options.get('output).get.asInstanceOf[String]
-    val printPerplexity = options.get('perplexity).get.asInstanceOf[Int]
-    val printVariationOfInformation = options.get('variationOfInformation).get.asInstanceOf[Int]
-    val printBestMatch = options.get('bestMatch).get.asInstanceOf[Int]
+    //val printPerplexity = options.get('perplexity).get.asInstanceOf[Int]
+    //val printVariationOfInformation = options.get('variationOfInformation).get.asInstanceOf[Int]
+    //val printBestMatch = options.get('bestMatch).get.asInstanceOf[Int]
     val numBurnins = options.get('numBurnins).get.asInstanceOf[Int]
     val numSamples = options.get('numSamples).get.asInstanceOf[Int]
     val optimizeEvery = options.get('optimizeEvery).get.asInstanceOf[Int]
@@ -193,80 +216,154 @@ object Main{
 
     logger.fine("%s".format(dataSet))
 
-    val model = options.get('mode).get.asInstanceOf[String] match{
-      case "tagging" => new TaggingModel(dataSet,
-					options.get('markov).get.asInstanceOf[Int],
-					options.get('numTags).get.asInstanceOf[Int],
-					options.get('transitionPrior).get.asInstanceOf[Double],
-					options.get('emissionPrior).get.asInstanceOf[Double],
-					options.get('symmetricTransitionPrior).get.asInstanceOf[Boolean],
-					options.get('symmetricEmissionPrior).get.asInstanceOf[Boolean],
-					options.get('typeBased).get.asInstanceOf[Boolean])
+    val model = (options.get('mode).get.asInstanceOf[String], options.get('typeBased).get.asInstanceOf[Boolean]) match{
 
-      case "morphology" => new MorphologyModel(dataSet,
-					       options.get('prefixPrior).get.asInstanceOf[Double],
-					       options.get('wordPrior).get.asInstanceOf[Double],
-					       options.get('suffixPrior).get.asInstanceOf[Double],
-					       options.get('subMorphPrior).get.asInstanceOf[Double],
-					       new PitmanYorPrior(options.get('adaptorPrior).get.asInstanceOf[Double], options.get('adaptorPrior).get.asInstanceOf[Double]),
-					       options.get('basePrior).get.asInstanceOf[Double],
-					       options.get('tagPrior).get.asInstanceOf[Double],
-					       options.get('ruleDirichletPrior).get.asInstanceOf[Double],
-					       options.get('wordParams).get.asInstanceOf[Int],
-					       options.get('isPrefixAllowed).get.asInstanceOf[Boolean],
-					       options.get('isSuffixAllowed).get.asInstanceOf[Boolean],
-					       options.get('isMultipleStemsAllowed).get.asInstanceOf[Boolean],
-					       options.get('isSubMorphAllowed).get.asInstanceOf[Boolean],
-					       options.get('isNonParametric).get.asInstanceOf[Boolean],
-					       options.get('isHierarchical).get.asInstanceOf[Boolean],
-					       options.get('burnIn).get.asInstanceOf[Int],
-					       options.get('cachingProb).get.asInstanceOf[Int],
-					       options.get('useHeuristics).get.asInstanceOf[Boolean],
-					       options.get('lexGen).get.asInstanceOf[Int],
-					       options.get('isDerivational).get.asInstanceOf[Boolean],
-					       options.get('inferePYP).get.asInstanceOf[Boolean],
-					       options.get('w).get.asInstanceOf[Double],
-					       options.get('m).get.asInstanceOf[Double],
-					       new GammaDistribution(options.get('gamma).get.asInstanceOf[Double], options.get('gamma).get.asInstanceOf[Double]),
-					       new BetaDistribution(options.get('beta).get.asInstanceOf[Double], options.get('beta).get.asInstanceOf[Double]),
-					       options.get('isBatch).get.asInstanceOf[Boolean],
-					       options.get('typeBased).get.asInstanceOf[Boolean]
-					     )
-      case _ => new JointModel(dataSet,
-			       options.get('markov).get.asInstanceOf[Int],
-			       options.get('numTags).get.asInstanceOf[Int],
-			       options.get('transitionPrior).get.asInstanceOf[Double],
-			       options.get('emissionPrior).get.asInstanceOf[Double],
-			       options.get('symmetricTransitionPrior).get.asInstanceOf[Boolean],
-			       options.get('symmetricEmissionPrior).get.asInstanceOf[Boolean],
-			       options.get('prefixPrior).get.asInstanceOf[Double],
-			       options.get('wordPrior).get.asInstanceOf[Double],
-			       options.get('suffixPrior).get.asInstanceOf[Double],
-			       options.get('subMorphPrior).get.asInstanceOf[Double],
-			       new PitmanYorPrior(options.get('adaptorPrior).get.asInstanceOf[Double], options.get('adaptorPrior).get.asInstanceOf[Double]),
-			       options.get('basePrior).get.asInstanceOf[Double],
-			       options.get('tagPrior).get.asInstanceOf[Double],
-			       options.get('ruleDirichletPrior).get.asInstanceOf[Double],
-			       options.get('wordParams).get.asInstanceOf[Int],
-			       options.get('isPrefixAllowed).get.asInstanceOf[Boolean],
-			       options.get('isSuffixAllowed).get.asInstanceOf[Boolean],
-			       options.get('isMultipleStemsAllowed).get.asInstanceOf[Boolean],
-			       options.get('isSubMorphAllowed).get.asInstanceOf[Boolean],
-			       options.get('isNonParametric).get.asInstanceOf[Boolean],
-			       options.get('isHierarchical).get.asInstanceOf[Boolean],
-			       options.get('burnIn).get.asInstanceOf[Int],
-			       options.get('cachingProb).get.asInstanceOf[Int],
-			       options.get('useHeuristics).get.asInstanceOf[Boolean],
-			       options.get('lexGen).get.asInstanceOf[Int],
-			       options.get('isDerivational).get.asInstanceOf[Boolean],
-			       options.get('inferePYP).get.asInstanceOf[Boolean],
-			       options.get('w).get.asInstanceOf[Double],
-			       options.get('m).get.asInstanceOf[Double],
-			       new GammaDistribution(options.get('gamma).get.asInstanceOf[Double], options.get('gamma).get.asInstanceOf[Double]),
-			       new BetaDistribution(options.get('beta).get.asInstanceOf[Double], options.get('beta).get.asInstanceOf[Double]),
-			       options.get('isBatch).get.asInstanceOf[Boolean],
-			       options.get('typeBased).get.asInstanceOf[Boolean]
-			     )
+      case ("tagging", true) => new TypeBasedTaggingModel(dataSet,
+							  options.get('markov).get.asInstanceOf[Int],
+							  options.get('numTags).get.asInstanceOf[Int],
+							  options.get('transitionPrior).get.asInstanceOf[Double],
+							  options.get('emissionPrior).get.asInstanceOf[Double],
+							  options.get('symmetricTransitionPrior).get.asInstanceOf[Boolean],
+							  options.get('symmetricEmissionPrior).get.asInstanceOf[Boolean]
+							)
+
+      case ("tagging", false) => new TokenBasedTaggingModel(dataSet,
+							    options.get('markov).get.asInstanceOf[Int],
+							    options.get('numTags).get.asInstanceOf[Int],
+							    options.get('transitionPrior).get.asInstanceOf[Double],
+							    options.get('emissionPrior).get.asInstanceOf[Double],
+							    options.get('symmetricTransitionPrior).get.asInstanceOf[Boolean],
+							    options.get('symmetricEmissionPrior).get.asInstanceOf[Boolean]
+							  )
+
+
+      case ("morphology", true) => new TypeBasedMorphologyModel(dataSet,
+								options.get('prefixPrior).get.asInstanceOf[Double],
+								options.get('wordPrior).get.asInstanceOf[Double],
+								options.get('suffixPrior).get.asInstanceOf[Double],
+								options.get('subMorphPrior).get.asInstanceOf[Double],
+								new PitmanYorPrior(options.get('adaptorPriorA).get.asInstanceOf[Double], options.get('adaptorPriorB).get.asInstanceOf[Double]),
+								options.get('basePrior).get.asInstanceOf[Double],
+								options.get('tagPrior).get.asInstanceOf[Double],
+								options.get('ruleDirichletPrior).get.asInstanceOf[Double],
+								options.get('wordParams).get.asInstanceOf[Int],
+								options.get('isPrefixAllowed).get.asInstanceOf[Boolean],
+								options.get('isSuffixAllowed).get.asInstanceOf[Boolean],
+								options.get('isMultipleStemsAllowed).get.asInstanceOf[Boolean],
+								options.get('isSubMorphAllowed).get.asInstanceOf[Boolean],
+								options.get('isNonParametric).get.asInstanceOf[Boolean],
+								options.get('isHierarchical).get.asInstanceOf[Boolean],
+								options.get('burnIn).get.asInstanceOf[Int],
+								options.get('cachingProb).get.asInstanceOf[Int],
+								options.get('useHeuristics).get.asInstanceOf[Boolean],
+								options.get('lexGen).get.asInstanceOf[Int],
+								options.get('isDerivational).get.asInstanceOf[Boolean],
+								options.get('inferePYP).get.asInstanceOf[Boolean],
+								options.get('w).get.asInstanceOf[Double],
+								options.get('m).get.asInstanceOf[Double],
+								new GammaDistribution(options.get('gammaPriorA).get.asInstanceOf[Double], options.get('gammaPriorB).get.asInstanceOf[Double]),
+								new BetaDistribution(options.get('betaPriorA).get.asInstanceOf[Double], options.get('betaPriorB).get.asInstanceOf[Double]),
+								options.get('isBatch).get.asInstanceOf[Boolean]
+							      )
+
+      case ("morphology", false) => new TokenBasedMorphologyModel(dataSet,
+								  options.get('prefixPrior).get.asInstanceOf[Double],
+								  options.get('wordPrior).get.asInstanceOf[Double],
+								  options.get('suffixPrior).get.asInstanceOf[Double],
+								  options.get('subMorphPrior).get.asInstanceOf[Double],
+								  new PitmanYorPrior(options.get('adaptorPriorA).get.asInstanceOf[Double], options.get('adaptorPriorB).get.asInstanceOf[Double]),
+								  options.get('basePrior).get.asInstanceOf[Double],
+								  options.get('tagPrior).get.asInstanceOf[Double],
+								  options.get('ruleDirichletPrior).get.asInstanceOf[Double],
+								  options.get('wordParams).get.asInstanceOf[Int],
+								  options.get('isPrefixAllowed).get.asInstanceOf[Boolean],
+								  options.get('isSuffixAllowed).get.asInstanceOf[Boolean],
+								  options.get('isMultipleStemsAllowed).get.asInstanceOf[Boolean],
+								  options.get('isSubMorphAllowed).get.asInstanceOf[Boolean],
+								  options.get('isNonParametric).get.asInstanceOf[Boolean],
+								  options.get('isHierarchical).get.asInstanceOf[Boolean],
+								  options.get('burnIn).get.asInstanceOf[Int],
+								  options.get('cachingProb).get.asInstanceOf[Int],
+								  options.get('useHeuristics).get.asInstanceOf[Boolean],
+								  options.get('lexGen).get.asInstanceOf[Int],
+								  options.get('isDerivational).get.asInstanceOf[Boolean],
+								  options.get('inferePYP).get.asInstanceOf[Boolean],
+								  options.get('w).get.asInstanceOf[Double],
+								  options.get('m).get.asInstanceOf[Double],
+								  new GammaDistribution(options.get('gammaPriorA).get.asInstanceOf[Double], options.get('gammaPriorB).get.asInstanceOf[Double]),
+								  new BetaDistribution(options.get('betaPriorA).get.asInstanceOf[Double], options.get('betaPriorB).get.asInstanceOf[Double]),
+								  options.get('isBatch).get.asInstanceOf[Boolean]
+								)
+
+      case (_, true) => new TypeBasedJointModel(dataSet,
+						options.get('markov).get.asInstanceOf[Int],
+						options.get('numTags).get.asInstanceOf[Int],
+						options.get('transitionPrior).get.asInstanceOf[Double],
+						options.get('emissionPrior).get.asInstanceOf[Double],
+						options.get('symmetricTransitionPrior).get.asInstanceOf[Boolean],
+						options.get('symmetricEmissionPrior).get.asInstanceOf[Boolean],
+						options.get('prefixPrior).get.asInstanceOf[Double],
+						options.get('wordPrior).get.asInstanceOf[Double],
+						options.get('suffixPrior).get.asInstanceOf[Double],
+						options.get('subMorphPrior).get.asInstanceOf[Double],
+						new PitmanYorPrior(options.get('adaptorPrior).get.asInstanceOf[Double], options.get('adaptorPrior).get.asInstanceOf[Double]),
+						options.get('basePrior).get.asInstanceOf[Double],
+						options.get('tagPrior).get.asInstanceOf[Double],
+						options.get('ruleDirichletPrior).get.asInstanceOf[Double],
+						options.get('wordParams).get.asInstanceOf[Int],
+						options.get('isPrefixAllowed).get.asInstanceOf[Boolean],
+						options.get('isSuffixAllowed).get.asInstanceOf[Boolean],
+						options.get('isMultipleStemsAllowed).get.asInstanceOf[Boolean],
+						options.get('isSubMorphAllowed).get.asInstanceOf[Boolean],
+						options.get('isNonParametric).get.asInstanceOf[Boolean],
+						options.get('isHierarchical).get.asInstanceOf[Boolean],
+						options.get('burnIn).get.asInstanceOf[Int],
+						options.get('cachingProb).get.asInstanceOf[Int],
+						options.get('useHeuristics).get.asInstanceOf[Boolean],
+						options.get('lexGen).get.asInstanceOf[Int],
+						options.get('isDerivational).get.asInstanceOf[Boolean],
+						options.get('inferePYP).get.asInstanceOf[Boolean],
+						options.get('w).get.asInstanceOf[Double],
+						options.get('m).get.asInstanceOf[Double],
+						new GammaDistribution(options.get('gamma).get.asInstanceOf[Double], options.get('gamma).get.asInstanceOf[Double]),
+						new BetaDistribution(options.get('beta).get.asInstanceOf[Double], options.get('beta).get.asInstanceOf[Double]),
+						options.get('isBatch).get.asInstanceOf[Boolean]
+					      )
+
+      case (_, false) => new TokenBasedJointModel(dataSet,
+						  options.get('markov).get.asInstanceOf[Int],
+						  options.get('numTags).get.asInstanceOf[Int],
+						  options.get('transitionPrior).get.asInstanceOf[Double],
+						  options.get('emissionPrior).get.asInstanceOf[Double],
+						  options.get('symmetricTransitionPrior).get.asInstanceOf[Boolean],
+						  options.get('symmetricEmissionPrior).get.asInstanceOf[Boolean],
+						  options.get('prefixPrior).get.asInstanceOf[Double],
+						  options.get('wordPrior).get.asInstanceOf[Double],
+						  options.get('suffixPrior).get.asInstanceOf[Double],
+						  options.get('subMorphPrior).get.asInstanceOf[Double],
+						  new PitmanYorPrior(options.get('adaptorPrior).get.asInstanceOf[Double], options.get('adaptorPrior).get.asInstanceOf[Double]),
+						  options.get('basePrior).get.asInstanceOf[Double],
+						  options.get('tagPrior).get.asInstanceOf[Double],
+						  options.get('ruleDirichletPrior).get.asInstanceOf[Double],
+						  options.get('wordParams).get.asInstanceOf[Int],
+						  options.get('isPrefixAllowed).get.asInstanceOf[Boolean],
+						  options.get('isSuffixAllowed).get.asInstanceOf[Boolean],
+						  options.get('isMultipleStemsAllowed).get.asInstanceOf[Boolean],
+						  options.get('isSubMorphAllowed).get.asInstanceOf[Boolean],
+						  options.get('isNonParametric).get.asInstanceOf[Boolean],
+						  options.get('isHierarchical).get.asInstanceOf[Boolean],
+						  options.get('burnIn).get.asInstanceOf[Int],
+						  options.get('cachingProb).get.asInstanceOf[Int],
+						  options.get('useHeuristics).get.asInstanceOf[Boolean],
+						  options.get('lexGen).get.asInstanceOf[Int],
+						  options.get('isDerivational).get.asInstanceOf[Boolean],
+						  options.get('inferePYP).get.asInstanceOf[Boolean],
+						  options.get('w).get.asInstanceOf[Double],
+						  options.get('m).get.asInstanceOf[Double],
+						  new GammaDistribution(options.get('gamma).get.asInstanceOf[Double], options.get('gamma).get.asInstanceOf[Double]),
+						  new BetaDistribution(options.get('beta).get.asInstanceOf[Double], options.get('beta).get.asInstanceOf[Double]),
+						  options.get('isBatch).get.asInstanceOf[Boolean]
+						)
     }
 
     //model.batchInitialize()
@@ -284,5 +381,6 @@ object Main{
       logger.fine("%s".format(model))
     }
     model.save(output)
+
   }
 }

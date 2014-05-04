@@ -16,6 +16,8 @@ class DataSet(val sentences : Seq[Seq[(Int, Option[Int], Seq[Int])]],
 	      val indexToTag : Map[Int, String],
 	      val indexToAnalysis : Map[Int, Seq[String]]) extends Seq[Seq[(Int, Option[Int], Seq[Int])]]{
   
+
+
   val wordToIndex = indexToWord.map(_.swap)
   val tagToIndex = indexToTag.map(_.swap)
   val analysisToIndex = indexToAnalysis.map(_.swap)

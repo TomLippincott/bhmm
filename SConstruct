@@ -7,6 +7,8 @@ import logging
 import time
 import re
 import bhmm_tools
+import scala_tools
+import morfessor_tools
 from os.path import join as pjoin
 
 vars = Variables("custom.py")
@@ -54,7 +56,7 @@ def print_cmd_line(s, target, source, env):
 logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S', level=logging.INFO)
 
 env = Environment(variables=vars, ENV=os.environ, TARFLAGS="-c -z", TARSUFFIX=".tgz",
-                  tools=["default", "textfile"] + [x.TOOLS_ADD for x in [bhmm_tools]],
+                  tools=["default", "textfile"] + [x.TOOLS_ADD for x in [bhmm_tools, scala_tools, morfessor_tools]],
                   BUILDERS={"CopyFile" : Builder(action="cp ${SOURCE} ${TARGET}"),
                             },
                   )
@@ -68,7 +70,8 @@ env.Decider("MD5-timestamp")
 
 data_sets = {}
 
-for language_name in ["turkish"]: #["assamese", "bengali", "pashto", "tagalog", "turkish", "zulu"]:
+for language_name in ["turkish"]: #"assamese", "bengali", "pashto", "tagalog", "turkish", "zulu"]:
+    continue
     if os.path.exists("data/%s_morphology.txt" % language_name):
         x = env.StandardizedToBHMM("work/sentences/%s_limited.xml.gz" % language_name, ["data/transcripts/%s/train.ref" % language_name, "data/%s_morphology.txt" % language_name])
                                    #["${LANGUAGE_PACKS}/%d.tgz" % language_id, "data/%s_morphology.txt" % language_name])
@@ -87,8 +90,8 @@ for language_name in ["turkish"]: #["assamese", "bengali", "pashto", "tagalog", 
 #     data_sets[language_name] = x
 
 data_sets["zulu"] = env.UkwabelanaToBHMM(["work/sentences/ukwabelana_zulu.xml.gz"], "data/UkwabelanaCorpus.tar.gz")
-full_english = env.PennToBHMM("work/sentences/english.xml.gz", ["data/penn_wsj_tag_data.txt.gz", "data/english_morphology.txt"])
-data_sets["english"] = env.CreateSubset("work/sentences/english_subset.xml.gz", [full_english, Value(3000), Value(None)])
+#full_english = env.PennToBHMM("work/sentences/english.xml.gz", ["data/penn_wsj_tag_data.txt.gz", "data/english_morphology.txt"])
+#data_sets["english"] = env.CreateSubset("work/sentences/english_subset.xml.gz", [full_english, Value(1500), Value(None)])
 
 # data_sets["persian"] = env.UpcToBHMM("work/sentences/persian.xml.gz", "data/UPC.txt.tar.gz")
 # data_sets["german"] = env.TigerToBHMM("work/sentences/german.xml.gz", "data/tigercorpus-2.2.xml.tar.gz")
@@ -104,6 +107,8 @@ arguments = [("--%s" % x, "${%s}" % x.replace("-", "_").upper()) for x in ["mark
 
 results = {}
 for language, data in [x for x in data_sets.iteritems() if x[0].startswith("uk") or True]:
+
+
     has_gold_morph = (language in ["english", "zulu", "turkish"])
     has_gold_tags = False
     limited = language in env["LANGUAGES"].values()
@@ -111,52 +116,53 @@ for language, data in [x for x in data_sets.iteritems() if x[0].startswith("uk")
     if has_gold_morph:
         gold_morph = env.DatasetToEmma("work/gold_standards/%s_morph.txt" % language, data)
         #env.EvaluateMorphology("work/gold_standards/%s_morph_dummy_evaluation.txt" % language, [gold_morph, gold_morph])        
-        random = env.RandomSegmentations("work/morfessor/%s_random.xml.gz" % language, data)
-        random_pred = env.DatasetToEmma("work/morfessor/%s_random_predictions.txt" % language, random)
-        results[("random", language)] = env.EvaluateMorphology("work/morfessor/%s_morph_random_evaluation.txt" % language, [gold_morph, random_pred])
+        #random = env.RandomSegmentations("work/morfessor/%s_random.xml.gz" % language, data)
+        #random_pred = env.DatasetToEmma("work/morfessor/%s_random_predictions.txt" % language, random)
+        #results[("random", language)] = env.EvaluateMorphology("work/morfessor/%s_morph_random_evaluation.txt" % language, [gold_morph, random_pred])
 
     #if has_gold_tags:
     #    env.EvaluateTagging("work/gold_standards/%s_tag_dummy_evaluation.txt" % language, [data, data])
-    
+
     #
     # Morfessor experiments
     #
-    output = env.TrainMorfessor("work/morfessor/%s.xml.gz" % (language), data, LIMITED=limited)
-    tri_output = env.MorfessorToTripartite("work/morfessor/%s_tripartite.xml.gz" % language, output)
+    output = env.TrainMorfessor("work/output/morfessor/%s.xml.gz" % (language), data, LIMITED=limited)
+    #tri_output = env.MorfessorToTripartite("work/morfessor/%s_tripartite.xml.gz" % language, output)
     if has_gold_morph:
-        pred = env.DatasetToEmma("work/morfessor/%s_predictions.txt" % language, output)
-        tri_pred = env.DatasetToEmma("work/morfessor/%s_tripartite_predictions.txt" % language, tri_output)        
+        pass
+        #pred = env.DatasetToEmma("work/morfessor/%s_predictions.txt" % language, output)
+        #tri_pred = env.DatasetToEmma("work/morfessor/%s_tripartite_predictions.txt" % language, tri_output)        
         #env.EvaluateMorphology("work/morfessor/%s_morph_dummy_evaluation.txt" % language, [pred, pred])
-        results[("morfessor", language)] = env.EvaluateMorphology("work/morfessor/%s_morph_evaluation.txt" % language, [gold_morph, pred])
-        results[("tri_morfessor", language)] = env.EvaluateMorphology("work/morfessor/%s_morph_tripartite_evaluation.txt" % language, [gold_morph, tri_pred])
+        #results[("morfessor", language)] = env.EvaluateMorphology("work/morfessor/%s_morph_evaluation.txt" % language, [gold_morph, pred])
+        #results[("tri_morfessor", language)] = env.EvaluateMorphology("work/morfessor/%s_morph_tripartite_evaluation.txt" % language, [gold_morph, tri_pred])
 
     #
     # Tagging experiments
     #
-    output = env.RunScala("work/tagging/%s.xml.gz" % language, [mt, env.Value("bhmm.Main"), data],
-                           ARGUMENTS=" ".join(sum(map(list, arguments + [("--mode", "tagging")]), [])), LIMITED=limited)
+    output = env.RunScala("work/output/tagging/%s.xml.gz" % language, [mt, env.Value("bhmm.Main"), data],
+                          ARGUMENTS=" ".join(sum(map(list, arguments + [("--mode", "tagging")]), [])), LIMITED=limited)
     env.Depends(output, mt)
     if has_gold_tags:
-        env.EvaluateTagging("work/tagging/%s_tag_dummy_evaluation.txt" % language, [pred, pred])
-        env.EvaluateTagging("work/tagging/%s_tag_evaluation.txt" % language, [data, pred])
-    
+        env.EvaluateTagging("work/evaluation/tagging/%s_tag_dummy_evaluation.txt" % language, [pred, pred])
+        env.EvaluateTagging("work/evaluation/tagging/%s_tag_evaluation.txt" % language, [data, pred])
+
     #
     # Morphology experiments
     #
-    output = env.RunScala("work/morphology/%s.xml.gz" % language, [mt, env.Value("bhmm.Main"), data],
-                           ARGUMENTS=" ".join(sum(map(list, arguments + [("--mode", "morphology")]), [])), LIMITED=limited)
+    output = env.RunScala("work/output/morphology/%s.xml.gz" % language, [mt, env.Value("bhmm.Main"), data],
+                          ARGUMENTS=" ".join(sum(map(list, arguments + [("--mode", "morphology")]), [])), LIMITED=limited)
     env.Depends(output, mt)
-    env.XMLToSadegh(output)
+    #env.XMLToSadegh(output)
     if has_gold_morph:
-        pred = env.DatasetToEmma("work/morphology/%s_predictions.txt" % language, output)
+        pred = env.DatasetToEmma("work/evaluation/morphology/%s_predictions.txt" % language, output)
         #env.EvaluateMorphology("work/morphology/%s_morph_dummy_evaluation.txt" % language, [pred, pred])
-        results[("ag_morphology", language)] = env.EvaluateMorphology("work/morphology/%s_morph_evaluation.txt" % language, [gold_morph, pred])
+        #results[("ag_morphology", language)] = env.EvaluateMorphology("work/evaluation/morphology/%s_morph_evaluation.txt" % language, [gold_morph, pred])
 
     #
     # Joint experiments
     #
-    output = env.RunScala("work/joint/%s.xml.gz" % language, [mt, env.Value("bhmm.Main"), data],
-                           ARGUMENTS=" ".join(sum(map(list, arguments + [("--mode", "morphology")]), [])), LIMITED=limited)
+    output = env.RunScala("work/output/joint/%s.xml.gz" % language, [mt, env.Value("bhmm.Main"), data],
+                          ARGUMENTS=" ".join(sum(map(list, arguments + [("--mode", "morphology")]), [])), LIMITED=limited)
     env.Depends(output, mt)
     # if has_gold_morph:
     #     pred = env.DatasetToEmma("work/joint/%s_predictions.txt" % language, output)
