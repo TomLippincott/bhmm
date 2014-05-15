@@ -6,7 +6,7 @@ import java.io._
 import java.util.logging._
 
 object Utilities{
-  val logger = Logger.getLogger(Utilities.getClass.getName)
+  val logger = Logger.getLogger("bhmm")
   val coarseTags = Map("CONJ" -> Seq("CC"),
 		       "DET" -> Seq("DT", "PDT"),
 		       "INPUNC" -> Seq("$", ",", ":", "LS", "SYM", "UH"),

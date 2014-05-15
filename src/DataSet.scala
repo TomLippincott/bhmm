@@ -17,15 +17,29 @@ class DataSet(val sentences : Seq[Seq[(Int, Option[Int], Seq[Int])]],
 	      val indexToAnalysis : Map[Int, Seq[String]]) extends Seq[Seq[(Int, Option[Int], Seq[Int])]]{
   
 
-
+  val locations = (0 until sentences.length).map(s => (0 until sentences(s).length).map(w => (s, w))).flatten
   val wordToIndex = indexToWord.map(_.swap)
   val tagToIndex = indexToTag.map(_.swap)
   val analysisToIndex = indexToAnalysis.map(_.swap)
   def words() : Set[String] = wordToIndex.keys.toSet
-  override def toString() : String = "DataSet: %d sentences, %d word types, %d analyses, %d tags".format(sentences.length, wordToIndex.size, analysisToIndex.size, tagToIndex.size)
+  override def toString() : String = "DataSet: %d sentences, %d tokens, %d word types, %d analyses, %d tags".format(sentences.length, sentences.map(_.length).sum, wordToIndex.size, analysisToIndex.size, tagToIndex.size)
   def apply(i : Int) : Seq[(Int, Option[Int], Seq[Int])] = sentences(i)
   def length : Int = sentences.length
   def iterator : Iterator[Seq[(Int, Option[Int], Seq[Int])]] = sentences.iterator
+  //def relevantLocations(wordId : Int) : Seq[Int] = {
+  /*
+  lazy val relevantLocations : Map[Int, Seq[Int]] = {
+    (0 until assignments.length).filter{
+      i =>
+	assignments(i) match{
+	  case Assigned(w, t) if w == wordId => true
+	  case Unassigned(w) if w == wordId => true
+	  case _ => false
+	}
+    }
+  }
+  */
+
   def save(out : Writer) : Unit = {
     val top = 
     <xml>
@@ -100,12 +114,10 @@ object DataSet{
   type Sentence = Seq[Location]
   type Sentences = Seq[Sentence]
 
-  def fromFile(fileName : String, numLines : Int=(-1), markov : Int=0, tagMap : Map[String, String] = Map()) : DataSet = {
-    val nulls = (0 to markov - 1).map(_ => (None, None)).toArray
+  def fromFile(fileName : String, tagMap : Map[String, String] = Map()) : DataSet = {
     val src = if(fileName.endsWith("gz")){ new GZIPInputStream(new BufferedInputStream(new FileInputStream(fileName))) }
 	      else{ new BufferedInputStream(new FileInputStream(fileName)) }
-
-    val (sentences, words, tags, analyses) = if(fileName.endsWith("xml") || fileName.endsWith("xml.gz")){ fromXML(src, numLines, markov, tagMap) }else{ fromXML(src, numLines, markov, tagMap) }
+    val (sentences, words, tags, analyses) = if(fileName.endsWith("xml") || fileName.endsWith("xml.gz")){ fromXML(src, tagMap) }else{ fromXML(src, tagMap) }
     new DataSet(sentences, words, tags, analyses)
   }
   
@@ -113,8 +125,8 @@ object DataSet{
   case class Outside() extends XmlLoc
   case class InTag() extends XmlLoc
   case class InMorph() extends XmlLoc
-
-  def fromXML(src : InputStream, numLines : Int, markov : Int, tagMap : Map[String, String] = Map(), trainOnly : Boolean=true) : (Sentences, Map[Int, String], Map[Int, String], Map[Int, Seq[String]]) = {
+  
+  def fromXML(src : InputStream, tagMap : Map[String, String] = Map(), trainOnly : Boolean=true) : (Sentences, Map[Int, String], Map[Int, String], Map[Int, Seq[String]]) = {
     val xml = XML.load(src)
     val words = (xml \ "preamble" \ "word_inventory" \ "entry").map(w => ((w \ "@id").text.toInt, w.text)).toMap
     val tags = (xml \ "preamble" \ "tag_inventory" \ "entry").map(t => ((t \ "@id").text.toInt, t.text)).toMap

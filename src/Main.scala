@@ -3,13 +3,13 @@ package bhmm
 import java.util.HashMap
 import java.util.Vector
 import java.util.Date
-import java.util.logging._
-import bhmm.Test._
+import java.util.logging.{Level, Logger, Formatter, FileHandler, ConsoleHandler, LogRecord}
+import bhmm.Test.{runTests}
 import bhmm.data.DataSet
 import bhmm.models.{TokenBasedTaggingModel, TypeBasedTaggingModel, TokenBasedMorphologyModel, TypeBasedMorphologyModel, TokenBasedJointModel, TypeBasedJointModel}
 import bhmm.evaluation.Intrinsic
 import AdaptorGrammar.PitmanYorPrior
-import Distributions._
+import Distributions.{GammaDistribution, BetaDistribution}
 
 object Main{  
 
@@ -19,12 +19,6 @@ object Main{
       d.toString + ": " + r.getMessage + "\n"
     }
   }
-
-  val handler = new ConsoleHandler()
-  handler.setFormatter(new MyFormatter)
-  val logger = Logger.getLogger("bhmm")
-  logger.setUseParentHandlers(false)
-  logger.addHandler(handler)
   
   val usage = ""
   /*
@@ -44,9 +38,6 @@ object Main{
   */
 
   def main(args: Array[String]){
-    val level = Level.FINE
-    handler.setLevel(level)
-    logger.setLevel(level)
     type OptionMap = Map[Symbol, Any]
     if(args.length == 0) println(usage)
     val arglist = args.toList
@@ -70,10 +61,10 @@ object Main{
 	// options for unsupervised tagger
 	case "--markov" :: value :: tail =>
           nextOption(map ++ Map('markov -> value.toInt), tail)	  
-	case "--num-sentences" :: value :: tail =>
-          nextOption(map ++ Map('numSentences -> value.toInt), tail)	  
+	//case "--num-sentences" :: value :: tail =>
+        //  nextOption(map ++ Map('numSentences -> value.toInt), tail)	  
 	case "--num-tags" :: value :: tail =>
-	  nextOption(map ++ Map('numTags -> value.toInt), tail)
+	  nextOption(map ++ Map('numTags -> value.toInt) ++ Map('wordParams -> value.toInt), tail)
 	case "--num-burnins" :: value :: tail =>
 	  nextOption(map ++ Map('numBurnins -> value.toInt), tail)
 	case "--num-samples" :: value :: tail =>
@@ -86,138 +77,155 @@ object Main{
 	  nextOption(map ++ Map('emissionPrior -> value.toDouble), tail)
 	case "--symmetric-emission-prior" :: tail =>
 	  nextOption(map ++ Map('optimizeEmissionPrior -> true), tail)
-	case "--optimize-every" :: value :: tail =>
-	  nextOption(map ++ Map('optimizeEvery -> value.toInt), tail)
-	case "--annealing" :: value :: tail =>
-	  nextOption(map ++ Map('annealing -> value.toDouble), tail)
+	//case "--optimize-every" :: value :: tail =>
+	//  nextOption(map ++ Map('optimizeEvery -> value.toInt), tail)
+	//case "--annealing" :: value :: tail =>
+	//  nextOption(map ++ Map('annealing -> value.toDouble), tail)
 	
 	// options for adaptor grammar morphology
 	case "--prefix-prior" :: value :: tail =>
 	  nextOption(map ++ Map('prefixPrior -> value.toDouble), tail)
+	case "--tag-prior" :: value :: tail =>
+	  nextOption(map ++ Map('tagPrior -> value.toDouble), tail)
+	case "--base-prior" :: value :: tail =>
+	  nextOption(map ++ Map('basePrior -> value.toDouble), tail)
 	case "--word-prior" :: value :: tail =>
 	  nextOption(map ++ Map('wordPrior -> value.toDouble), tail)
 	case "--suffix-prior" :: value :: tail =>
 	  nextOption(map ++ Map('suffixPrior -> value.toDouble), tail)
-	case "--sub-morph-prior" :: value :: tail =>
-	  nextOption(map ++ Map('subMorphPrior -> value.toDouble), tail)
-	case "--adapt-prior" :: value :: tail =>
-	  nextOption(map ++ Map('adaptPrior -> value.toDouble), tail)
-	case "--rule-dirichlet-prior" :: value :: tail =>
-	  nextOption(map ++ Map('ruleDirichletPrior -> value.toDouble), tail)
-	case "--word-params-prior" :: value :: tail =>
-	  nextOption(map ++ Map('wordParams -> value.toDouble), tail)
-	case "--multipleStems" :: tail =>
+	case "--submorph-prior" :: value :: tail =>
+	  nextOption(map ++ Map('submorphPrior -> value.toDouble), tail)
+	case "--adaptor-prior-a" :: value :: tail =>
+	  nextOption(map ++ Map('adaptorPriorA -> value.toDouble), tail)
+	case "--adaptor-prior-b" :: value :: tail =>
+	  nextOption(map ++ Map('adaptorPriorB -> value.toDouble), tail)
+	case "--rule-prior" :: value :: tail =>
+	  nextOption(map ++ Map('rulePrior -> value.toDouble), tail)
+	case "--cache-probability" :: value :: tail =>
+	  nextOption(map ++ Map('cacheProbability -> value.toInt), tail)
+	//case "--word-params-prior" :: value :: tail =>
+	//  nextOption(map ++ Map('wordParams -> value.toDouble), tail)
+
+
+	case "--multiple-stems" :: tail =>
 	  nextOption(map ++ Map('multipleStems -> true), tail)
 	case "--prefixes" :: tail =>
 	  nextOption(map ++ Map('prefixes -> true), tail)
 	case "--suffixes" :: tail =>
 	  nextOption(map ++ Map('suffixes -> true), tail)
-	case "--subMorphs" :: tail =>
-	  nextOption(map ++ Map('subMorphs -> true), tail)
-	case "--nonParametric" :: tail =>
+	case "--submorphs" :: tail =>
+	  nextOption(map ++ Map('submorphs -> true), tail)
+	case "--non-parametric" :: tail =>
 	  nextOption(map ++ Map('nonParametric -> true), tail)
+	case "--hierarchical" :: tail =>
+	  nextOption(map ++ Map('hierarchical -> true), tail)
+	case "--use-heuristics" :: tail =>
+	  nextOption(map ++ Map('useHeuristics -> true), tail)
+	case "--derivational" :: tail =>
+	  nextOption(map ++ Map('derivational -> true), tail)
+	case "--infer-pyp" :: tail =>
+	  nextOption(map ++ Map('inferPYP -> true), tail)
+	case "--batch" :: tail =>
+	  nextOption(map ++ Map('batch -> true), tail)
+
+
 
 	// options for evaluation methods
-	case "--perplexity" :: value :: tail =>
-	  nextOption(map ++ Map('perplexity -> value.toInt), tail)
-	case "--variation-of-information" :: value :: tail =>
-	  nextOption(map ++ Map('variationOfInformation -> value.toInt), tail)
-	case "--best-match" :: value :: tail =>
-	  nextOption(map ++ Map('bestMatch -> value.toInt), tail)
+	// case "--perplexity" :: value :: tail =>
+	//   nextOption(map ++ Map('perplexity -> value.toInt), tail)
+	// case "--variation-of-information" :: value :: tail =>
+	//   nextOption(map ++ Map('variationOfInformation -> value.toInt), tail)
+	// case "--best-match" :: value :: tail =>
+	//   nextOption(map ++ Map('bestMatch -> value.toInt), tail)
 
 	// other options
 	case "--help" :: tail =>
 	  println(usage)
 	  sys.exit(0)
-	case "--test" :: tail =>
-	  runTests
-	  sys.exit(0)
+	//case "--test" :: tail =>
+	//  runTests
+	//  sys.exit(0)
         case option :: tail => 
 	  println("Unknown option " + option)
 	  println(usage)
 	  sys.exit(1) 
       }      
     }
-    
-    val options = nextOption(Map('logFile -> "",
-				 'mode -> "joint",
+
+    // set default argument values
+    val options = nextOption(Map('mode -> "joint",
 				 'markov -> 2,
-				 'numSentences -> -1,
-				 'numTags -> 20,
-				 'numBurnins -> 10,
+				 'numTags -> 10,
+				 'numBurnins -> 1,
 				 'numSamples -> 10,
 				 'transitionPrior -> .1,
 				 'symmetricTransitionPrior -> false,
 				 'emissionPrior -> .1,
 				 'symmetricEmissionPrior -> false,
-				 'optimizeEvery -> 5,
-				 'annealing -> 1.0,
-				 'perplexity -> 0,
-				 'bestMatch -> 0,
-				 'variationOfInformation -> 0,
-				 'prefixPrior -> .001,
-				 'wordPrior -> .001,
-				 'suffixPrior -> .001,
-				 'subMorphPrior -> .001,
+				 'prefixPrior -> 1.0,
+				 'wordPrior -> 1.0,
+				 'suffixPrior -> 1.0,
+				 'submorphPrior -> 1.0,
 				 'adaptorPriorA -> 0.0,
-				 'adaptorPriorB -> 1.0,
-				 'ruleDirichletPrior -> .1,
-				 'wordParams -> 1,
+				 'adaptorPriorB -> 100.0,
+				 'rulePrior -> 1.0,
+				 //'wordParams -> 1,
 				 'multipleStems -> true,
 				 'prefixes -> true,
 				 'suffixes -> true,
-				 'subMorphs -> true,
-				 'nonParametric -> true,
+				 'submorphs -> true,
+				 'nonParametric -> false,
 				 'typeBased -> true,
 				 'basePrior -> 1.0,
-				 'gammaPriorA -> 1.0,
-				 'gammaPriorB -> 1.0,
-				 'betaPriorA -> 1.0,
-				 'betaPriorB -> 1.0,
-				 'isPrefixAllowed -> false,
-				 'isSuffixAllowed -> false,
-				 'isSubMorphAllowed -> false,
-				 'isMultipleStemsAllowed -> false,
-				 'isNonParametric -> false,
-				 'isHierarchical -> false,
-				 'burnIn -> 0,
+				 //'w -> 1.0,
+				 //'m -> 1.0,
+				 //'gammaPriorA -> 1.0,
+				 //'gammaPriorB -> 1.0,
+				 //'betaPriorA -> 1.0,
+				 //'betaPriorB -> 1.0,
+				 'hierarchical -> false,
+				 //'burnIn -> 10,
 				 'useHeuristics -> false,
-				 'isDerivational -> false,
-				 'isBatch -> false,
-				 'lexGen -> 1000,
-				 'inferePYP -> false,
-				 'w -> 1.0,
-				 'm -> 1.0,
-				 'tagPrior -> 1.0,
-				 'cachingProb -> 10
+				 'derivational -> false,
+				 //'batch -> false,
+				 'lexGen -> 0,
+				 'inferPYP -> false,
+				 'tagPrior -> .1,
+				 'cacheProbability -> 100,
+				 'tagPrior -> .1
 			       ), arglist)
 
+    // set up logging infrastructure
+    val consoleLevel = Level.INFO
+    val fileLevel = Level.FINEST
+    val logger = Logger.getLogger("bhmm")
+    logger.setUseParentHandlers(false)
+    options.get('logFile) match{
+      case Some(f) => 
+	val handler = new FileHandler(f.asInstanceOf[String])
+	handler.setFormatter(new MyFormatter)
+	handler.setLevel(fileLevel)
+	logger.addHandler(handler)
+      case _ => Unit
+    }
+    val handler = new ConsoleHandler()
+    handler.setFormatter(new MyFormatter)
+    handler.setLevel(consoleLevel)
+    logger.addHandler(handler)
+    logger.setLevel(Level.FINEST)
 
-    val output = options.get('output).get.asInstanceOf[String]
-    //val printPerplexity = options.get('perplexity).get.asInstanceOf[Int]
-    //val printVariationOfInformation = options.get('variationOfInformation).get.asInstanceOf[Int]
-    //val printBestMatch = options.get('bestMatch).get.asInstanceOf[Int]
+    // read required arguments
+    val input = options.get('input).get.asInstanceOf[String]
+    val output = options.get('output).get.asInstanceOf[String]    
     val numBurnins = options.get('numBurnins).get.asInstanceOf[Int]
     val numSamples = options.get('numSamples).get.asInstanceOf[Int]
-    val optimizeEvery = options.get('optimizeEvery).get.asInstanceOf[Int]
-    val annealing = options.get('annealing).get.asInstanceOf[Double]
 
-    val ruleDirichletPrior = options.get('ruleDirichletPrior).get.asInstanceOf[Double]
-    val wordParams = options.get('wordParams).get.asInstanceOf[Int]
-    val prefixes = options.get('prefixes).get.asInstanceOf[Boolean]
-    val suffixes = options.get('suffixes).get.asInstanceOf[Boolean]
-    val multipleStems = options.get('multipleStems).get.asInstanceOf[Boolean]
-    val subMorphs = options.get('subMorphs).get.asInstanceOf[Boolean]
-    val nonParametric = options.get('nonParametric).get.asInstanceOf[Boolean]
+    // load data
+    val dataSet = DataSet.fromFile(input)
+    logger.info("%s".format(dataSet))
 
-    val dataSet = DataSet.fromFile(options.get('input).get.asInstanceOf[String],
-				   options.get('numSentences).get.asInstanceOf[Int],
-				   options.get('markov).get.asInstanceOf[Int])
-
-    logger.fine("%s".format(dataSet))
-
+    // construct appropriate model
     val model = (options.get('mode).get.asInstanceOf[String], options.get('typeBased).get.asInstanceOf[Boolean]) match{
-
       case ("tagging", true) => new TypeBasedTaggingModel(dataSet,
 							  options.get('markov).get.asInstanceOf[Int],
 							  options.get('numTags).get.asInstanceOf[Int],
@@ -226,7 +234,6 @@ object Main{
 							  options.get('symmetricTransitionPrior).get.asInstanceOf[Boolean],
 							  options.get('symmetricEmissionPrior).get.asInstanceOf[Boolean]
 							)
-
       case ("tagging", false) => new TokenBasedTaggingModel(dataSet,
 							    options.get('markov).get.asInstanceOf[Int],
 							    options.get('numTags).get.asInstanceOf[Int],
@@ -235,150 +242,116 @@ object Main{
 							    options.get('symmetricTransitionPrior).get.asInstanceOf[Boolean],
 							    options.get('symmetricEmissionPrior).get.asInstanceOf[Boolean]
 							  )
-
-
       case ("morphology", true) => new TypeBasedMorphologyModel(dataSet,
+								options.get('numTags).get.asInstanceOf[Int],
 								options.get('prefixPrior).get.asInstanceOf[Double],
 								options.get('wordPrior).get.asInstanceOf[Double],
 								options.get('suffixPrior).get.asInstanceOf[Double],
-								options.get('subMorphPrior).get.asInstanceOf[Double],
+								options.get('submorphPrior).get.asInstanceOf[Double],
 								new PitmanYorPrior(options.get('adaptorPriorA).get.asInstanceOf[Double], options.get('adaptorPriorB).get.asInstanceOf[Double]),
 								options.get('basePrior).get.asInstanceOf[Double],
 								options.get('tagPrior).get.asInstanceOf[Double],
-								options.get('ruleDirichletPrior).get.asInstanceOf[Double],
-								options.get('wordParams).get.asInstanceOf[Int],
-								options.get('isPrefixAllowed).get.asInstanceOf[Boolean],
-								options.get('isSuffixAllowed).get.asInstanceOf[Boolean],
-								options.get('isMultipleStemsAllowed).get.asInstanceOf[Boolean],
-								options.get('isSubMorphAllowed).get.asInstanceOf[Boolean],
-								options.get('isNonParametric).get.asInstanceOf[Boolean],
-								options.get('isHierarchical).get.asInstanceOf[Boolean],
-								options.get('burnIn).get.asInstanceOf[Int],
-								options.get('cachingProb).get.asInstanceOf[Int],
+								options.get('rulePrior).get.asInstanceOf[Double],
+								options.get('prefixes).get.asInstanceOf[Boolean],
+								options.get('suffixes).get.asInstanceOf[Boolean],
+								options.get('multipleStems).get.asInstanceOf[Boolean],
+								options.get('submorphs).get.asInstanceOf[Boolean],
+								options.get('nonParametric).get.asInstanceOf[Boolean],
+								options.get('hierarchical).get.asInstanceOf[Boolean],
+								options.get('cacheProbability).get.asInstanceOf[Int],
 								options.get('useHeuristics).get.asInstanceOf[Boolean],
-								options.get('lexGen).get.asInstanceOf[Int],
-								options.get('isDerivational).get.asInstanceOf[Boolean],
-								options.get('inferePYP).get.asInstanceOf[Boolean],
-								options.get('w).get.asInstanceOf[Double],
-								options.get('m).get.asInstanceOf[Double],
-								new GammaDistribution(options.get('gammaPriorA).get.asInstanceOf[Double], options.get('gammaPriorB).get.asInstanceOf[Double]),
-								new BetaDistribution(options.get('betaPriorA).get.asInstanceOf[Double], options.get('betaPriorB).get.asInstanceOf[Double]),
-								options.get('isBatch).get.asInstanceOf[Boolean]
+								options.get('derivational).get.asInstanceOf[Boolean],
+								options.get('inferPYP).get.asInstanceOf[Boolean]
 							      )
-
       case ("morphology", false) => new TokenBasedMorphologyModel(dataSet,
+								  options.get('numTags).get.asInstanceOf[Int],
 								  options.get('prefixPrior).get.asInstanceOf[Double],
 								  options.get('wordPrior).get.asInstanceOf[Double],
 								  options.get('suffixPrior).get.asInstanceOf[Double],
-								  options.get('subMorphPrior).get.asInstanceOf[Double],
+								  options.get('submorphPrior).get.asInstanceOf[Double],
 								  new PitmanYorPrior(options.get('adaptorPriorA).get.asInstanceOf[Double], options.get('adaptorPriorB).get.asInstanceOf[Double]),
 								  options.get('basePrior).get.asInstanceOf[Double],
 								  options.get('tagPrior).get.asInstanceOf[Double],
-								  options.get('ruleDirichletPrior).get.asInstanceOf[Double],
-								  options.get('wordParams).get.asInstanceOf[Int],
-								  options.get('isPrefixAllowed).get.asInstanceOf[Boolean],
-								  options.get('isSuffixAllowed).get.asInstanceOf[Boolean],
-								  options.get('isMultipleStemsAllowed).get.asInstanceOf[Boolean],
-								  options.get('isSubMorphAllowed).get.asInstanceOf[Boolean],
-								  options.get('isNonParametric).get.asInstanceOf[Boolean],
-								  options.get('isHierarchical).get.asInstanceOf[Boolean],
-								  options.get('burnIn).get.asInstanceOf[Int],
-								  options.get('cachingProb).get.asInstanceOf[Int],
+								  options.get('rulePrior).get.asInstanceOf[Double],
+								  options.get('prefixes).get.asInstanceOf[Boolean],
+								  options.get('suffixes).get.asInstanceOf[Boolean],
+								  options.get('multipleStems).get.asInstanceOf[Boolean],
+								  options.get('submorphs).get.asInstanceOf[Boolean],
+								  options.get('nonParametric).get.asInstanceOf[Boolean],
+								  options.get('hierarchical).get.asInstanceOf[Boolean],
+								  options.get('cacheProbability).get.asInstanceOf[Int],
 								  options.get('useHeuristics).get.asInstanceOf[Boolean],
-								  options.get('lexGen).get.asInstanceOf[Int],
-								  options.get('isDerivational).get.asInstanceOf[Boolean],
-								  options.get('inferePYP).get.asInstanceOf[Boolean],
-								  options.get('w).get.asInstanceOf[Double],
-								  options.get('m).get.asInstanceOf[Double],
-								  new GammaDistribution(options.get('gammaPriorA).get.asInstanceOf[Double], options.get('gammaPriorB).get.asInstanceOf[Double]),
-								  new BetaDistribution(options.get('betaPriorA).get.asInstanceOf[Double], options.get('betaPriorB).get.asInstanceOf[Double]),
-								  options.get('isBatch).get.asInstanceOf[Boolean]
+								  options.get('derivational).get.asInstanceOf[Boolean],
+								  options.get('inferPYP).get.asInstanceOf[Boolean]
 								)
-
       case (_, true) => new TypeBasedJointModel(dataSet,
-						options.get('markov).get.asInstanceOf[Int],
-						options.get('numTags).get.asInstanceOf[Int],
-						options.get('transitionPrior).get.asInstanceOf[Double],
-						options.get('emissionPrior).get.asInstanceOf[Double],
-						options.get('symmetricTransitionPrior).get.asInstanceOf[Boolean],
-						options.get('symmetricEmissionPrior).get.asInstanceOf[Boolean],
+      						options.get('markov).get.asInstanceOf[Int],
+      						options.get('numTags).get.asInstanceOf[Int],
+      						options.get('transitionPrior).get.asInstanceOf[Double],
+      						options.get('emissionPrior).get.asInstanceOf[Double],
+      						options.get('symmetricTransitionPrior).get.asInstanceOf[Boolean],
+      						options.get('symmetricEmissionPrior).get.asInstanceOf[Boolean],
 						options.get('prefixPrior).get.asInstanceOf[Double],
 						options.get('wordPrior).get.asInstanceOf[Double],
 						options.get('suffixPrior).get.asInstanceOf[Double],
-						options.get('subMorphPrior).get.asInstanceOf[Double],
-						new PitmanYorPrior(options.get('adaptorPrior).get.asInstanceOf[Double], options.get('adaptorPrior).get.asInstanceOf[Double]),
+						options.get('submorphPrior).get.asInstanceOf[Double],
+						new PitmanYorPrior(options.get('adaptorPriorA).get.asInstanceOf[Double], options.get('adaptorPriorB).get.asInstanceOf[Double]),
 						options.get('basePrior).get.asInstanceOf[Double],
 						options.get('tagPrior).get.asInstanceOf[Double],
-						options.get('ruleDirichletPrior).get.asInstanceOf[Double],
-						options.get('wordParams).get.asInstanceOf[Int],
-						options.get('isPrefixAllowed).get.asInstanceOf[Boolean],
-						options.get('isSuffixAllowed).get.asInstanceOf[Boolean],
-						options.get('isMultipleStemsAllowed).get.asInstanceOf[Boolean],
-						options.get('isSubMorphAllowed).get.asInstanceOf[Boolean],
-						options.get('isNonParametric).get.asInstanceOf[Boolean],
-						options.get('isHierarchical).get.asInstanceOf[Boolean],
-						options.get('burnIn).get.asInstanceOf[Int],
-						options.get('cachingProb).get.asInstanceOf[Int],
+						options.get('rulePrior).get.asInstanceOf[Double],
+						options.get('prefixes).get.asInstanceOf[Boolean],
+						options.get('suffixes).get.asInstanceOf[Boolean],
+						options.get('multipleStems).get.asInstanceOf[Boolean],
+						options.get('submorphs).get.asInstanceOf[Boolean],
+						options.get('nonParametric).get.asInstanceOf[Boolean],
+						options.get('hierarchical).get.asInstanceOf[Boolean],
+						options.get('cacheProbability).get.asInstanceOf[Int],
 						options.get('useHeuristics).get.asInstanceOf[Boolean],
-						options.get('lexGen).get.asInstanceOf[Int],
-						options.get('isDerivational).get.asInstanceOf[Boolean],
-						options.get('inferePYP).get.asInstanceOf[Boolean],
-						options.get('w).get.asInstanceOf[Double],
-						options.get('m).get.asInstanceOf[Double],
-						new GammaDistribution(options.get('gamma).get.asInstanceOf[Double], options.get('gamma).get.asInstanceOf[Double]),
-						new BetaDistribution(options.get('beta).get.asInstanceOf[Double], options.get('beta).get.asInstanceOf[Double]),
-						options.get('isBatch).get.asInstanceOf[Boolean]
-					      )
-
+						options.get('derivational).get.asInstanceOf[Boolean],
+						options.get('inferPYP).get.asInstanceOf[Boolean]
+      					      )
       case (_, false) => new TokenBasedJointModel(dataSet,
-						  options.get('markov).get.asInstanceOf[Int],
-						  options.get('numTags).get.asInstanceOf[Int],
-						  options.get('transitionPrior).get.asInstanceOf[Double],
-						  options.get('emissionPrior).get.asInstanceOf[Double],
-						  options.get('symmetricTransitionPrior).get.asInstanceOf[Boolean],
-						  options.get('symmetricEmissionPrior).get.asInstanceOf[Boolean],
+      						  options.get('markov).get.asInstanceOf[Int],
+      						  options.get('numTags).get.asInstanceOf[Int],
+      						  options.get('transitionPrior).get.asInstanceOf[Double],
+      						  options.get('emissionPrior).get.asInstanceOf[Double],
+      						  options.get('symmetricTransitionPrior).get.asInstanceOf[Boolean],
+      						  options.get('symmetricEmissionPrior).get.asInstanceOf[Boolean],
 						  options.get('prefixPrior).get.asInstanceOf[Double],
 						  options.get('wordPrior).get.asInstanceOf[Double],
 						  options.get('suffixPrior).get.asInstanceOf[Double],
-						  options.get('subMorphPrior).get.asInstanceOf[Double],
-						  new PitmanYorPrior(options.get('adaptorPrior).get.asInstanceOf[Double], options.get('adaptorPrior).get.asInstanceOf[Double]),
+						  options.get('submorphPrior).get.asInstanceOf[Double],
+						  new PitmanYorPrior(options.get('adaptorPriorA).get.asInstanceOf[Double], options.get('adaptorPriorB).get.asInstanceOf[Double]),
 						  options.get('basePrior).get.asInstanceOf[Double],
 						  options.get('tagPrior).get.asInstanceOf[Double],
-						  options.get('ruleDirichletPrior).get.asInstanceOf[Double],
-						  options.get('wordParams).get.asInstanceOf[Int],
-						  options.get('isPrefixAllowed).get.asInstanceOf[Boolean],
-						  options.get('isSuffixAllowed).get.asInstanceOf[Boolean],
-						  options.get('isMultipleStemsAllowed).get.asInstanceOf[Boolean],
-						  options.get('isSubMorphAllowed).get.asInstanceOf[Boolean],
-						  options.get('isNonParametric).get.asInstanceOf[Boolean],
-						  options.get('isHierarchical).get.asInstanceOf[Boolean],
-						  options.get('burnIn).get.asInstanceOf[Int],
-						  options.get('cachingProb).get.asInstanceOf[Int],
+						  options.get('rulePrior).get.asInstanceOf[Double],
+						  options.get('prefixes).get.asInstanceOf[Boolean],
+						  options.get('suffixes).get.asInstanceOf[Boolean],
+						  options.get('multipleStems).get.asInstanceOf[Boolean],
+						  options.get('submorphs).get.asInstanceOf[Boolean],
+						  options.get('nonParametric).get.asInstanceOf[Boolean],
+						  options.get('hierarchical).get.asInstanceOf[Boolean],
+						  options.get('cacheProbability).get.asInstanceOf[Int],
 						  options.get('useHeuristics).get.asInstanceOf[Boolean],
-						  options.get('lexGen).get.asInstanceOf[Int],
-						  options.get('isDerivational).get.asInstanceOf[Boolean],
-						  options.get('inferePYP).get.asInstanceOf[Boolean],
-						  options.get('w).get.asInstanceOf[Double],
-						  options.get('m).get.asInstanceOf[Double],
-						  new GammaDistribution(options.get('gamma).get.asInstanceOf[Double], options.get('gamma).get.asInstanceOf[Double]),
-						  new BetaDistribution(options.get('beta).get.asInstanceOf[Double], options.get('beta).get.asInstanceOf[Double]),
-						  options.get('isBatch).get.asInstanceOf[Boolean]
-						)
+						  options.get('derivational).get.asInstanceOf[Boolean],
+						  options.get('inferPYP).get.asInstanceOf[Boolean]
+      						)
     }
 
     //model.batchInitialize()
-    
+    logger.info("starting burn-in")
     for(i <- 1 to numBurnins){
-      logger.fine("burnin #%d".format(i))
+      logger.info("burnin #%d".format(i))
       model.sample()
-      logger.fine("Joint latent probability: %s".format(model.totalProbability()))
-      logger.fine("%s".format(model))
+      //logger.fine("Joint latent probability: %s".format(model.totalProbability()))
+      logger.info("%s".format(model))
     }
+    logger.info("starting sampling")
     for(i <- 1 to numSamples){
-      logger.fine("sample #%d".format(i))
+      logger.info("sample #%d".format(i))
       model.sample()
-      logger.fine("Joint latent probability: %s".format(model.totalProbability()))
-      logger.fine("%s".format(model))
+      //logger.fine("Joint latent probability: %s".format(model.totalProbability()))
+      logger.info("%s".format(model))
     }
     model.save(output)
 

@@ -1,9 +1,8 @@
 package bhmm
 
-import java.util.logging._
+import bhmm.Utilities.logger
 
 object Test{
-  val logger = Logger.getLogger(Test.getClass.getName)
   def runTests = {
   /*
     val rng = new scala.util.Random()

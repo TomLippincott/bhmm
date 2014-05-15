@@ -1,10 +1,10 @@
 package bhmm
 
-import org.apache.commons.math3.special.Gamma
-import java.util.logging._
+//import org.apache.commons.math3.special.Gamma
+import bhmm.Utilities.logger
 
 object Dirichlet{
-  val logger = Logger.getLogger(Dirichlet.getClass.getName)
+  /*
   def symmetricOptimizeHyperParameters(parameters : Array[Double], groupByObsCounts : Array[Array[Int]], iterations : Int) : Unit = {
     val currentValue = parameters.sum / parameters.length
     val numGroups = groupByObsCounts.length
@@ -32,5 +32,5 @@ object Dirichlet{
     (0 to numObs - 1).map(o => parameters(o) = update(o) + .00001)
     if(iterations <= 0){ Unit }else{ asymmetricOptimizeHyperParameters(parameters, groupByObsCounts, iterations - 1) }
   }
-
+  */
 }
