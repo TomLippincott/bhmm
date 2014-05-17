@@ -99,11 +99,11 @@ for language in ["english", "arabic", "german", "hebrew", "turkish"]:
 
     # convert training data to XML format
     train = env.CONLLishToXML(os.path.join("work", "data", language, "train.xml.gz"), 
-                              os.path.join("${EMNLP_BASE_PATH}/emnlp2014_data", language, "pos", "train.pos"))
+                              os.path.join("${EMNLP_DATA_PATH}", language, "pos", "train.pos"))
 
     # OOV reduction evaluation data
-    small_oov = env.File("${EMNLP_BASE_PATH}/emnlp2014_data/%s/oov_eval/small_eval.freq" % (language))
-    big_oov = env.File("${EMNLP_BASE_PATH}/emnlp2014_data/%s/oov_eval/big_eval.freq" % (language))
+    small_oov = env.File("${EMNLP_DATA_PATH}/%s/oov_eval/small_eval.freq" % (language))
+    big_oov = env.File("${EMNLP_DATA_PATH}/%s/oov_eval/big_eval.freq" % (language))
 
     # for each expansion method
     for generation_method in ["adaptor", "iadaptor", "bbg"]:
@@ -111,7 +111,7 @@ for language in ["english", "arabic", "german", "hebrew", "turkish"]:
         # split into different reranking methods
         expansions = {k : v for k, v in zip(["nrr", "tri", "tri_bound"],
                                             env.SplitExpansions(["work/expansions/${LANGUAGE}/%s/%s.txt" % (generation_method, x) for x in ["nrr", "tri", "tri_bound"]], 
-                                                                "${EMNLP_BASE_PATH}/emnlp2014_experiments/%s/expansion/%s.ex" % (language, generation_method), LANGUAGE=language))}
+                                                                "${EMNLP_EXPERIMENTS_PATH}/%s/expansion/%s.ex" % (language, generation_method), LANGUAGE=language))}
 
         # create files tracking performance across N bins
         reductions = {}
