@@ -8,9 +8,9 @@ import time
 import re
 from os.path import join as pjoin
 import bhmm_tools
-import scala_tools
-import morfessor_tools
-import openfst_tools
+#import scala_tools
+#import morfessor_tools
+#import openfst_tools
 import evaluation_tools
 
 vars = Variables("custom.py")
@@ -61,7 +61,7 @@ logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S
 
 # initialize build environment
 env = Environment(variables=vars, ENV=os.environ, TARFLAGS="-c -z", TARSUFFIX=".tgz",
-                  tools=["default", "textfile"] + [x.TOOLS_ADD for x in [bhmm_tools, scala_tools, morfessor_tools, openfst_tools, evaluation_tools]],
+                  tools=["default", "textfile"] + [x.TOOLS_ADD for x in [bhmm_tools, evaluation_tools]],
                   BUILDERS={"CopyFile" : Builder(action="cp ${SOURCE} ${TARGET}"),
                             },
                   )
