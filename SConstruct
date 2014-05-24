@@ -95,10 +95,10 @@ morphology_parameters = " ".join(["--%s ${%s}" % (x.lower().replace("_", "-"), x
                                  ["${%s==True and '--%s' or ''}" % (x, x.lower().replace("_", "-")) for x in ["MULTIPLE_STEMS", "SUFFIXES", "PREFIXES", "SUBMORPHS", "NON_PARAMETRIC", "HIERARCHICAL", "USE_HEURISTICS", "DERIVATIONAL", "INFER_PYP"]])
 
 # compile the adaptor grammar and BHMM code into a single jar file
-java_classes = env.Java(pjoin("work", "classes"), pjoin(env["MORPHOLOGY_PATH"], "src"))
-scala_classes = env.Scala(env.Dir(pjoin("work", "classes", "bhmm")), [env.Dir("src")] + java_classes)
-env.Depends(scala_classes, java_classes)
-mt = env.Jar(pjoin("work", "morphological_tagger.jar"), "work/classes", JARCHDIR="work/classes")
+#java_classes = env.Java(pjoin("work", "classes"), pjoin(env["MORPHOLOGY_PATH"], "src"))
+#scala_classes = env.Scala(env.Dir(pjoin("work", "classes", "bhmm")), [env.Dir("src")] + java_classes)
+#env.Depends(scala_classes, java_classes)
+#mt = env.Jar(pjoin("work", "morphological_tagger.jar"), "work/classes", JARCHDIR="work/classes")
 
 # iterate over each language
 data_sets = {}
@@ -123,9 +123,7 @@ for language in ["english", "turkish", "hebrew", "german", "arabic"]:
     acceptor = env.get_builder("%sFilter" % (language.title()))
     
     # run acceptors on training data to get baseline acceptor quality
-    acceptor_quality = acceptor(env, ["work/acceptor_quality/%s_%s.txt" % (language, x) for x in ["good", "bad"]], training)
-
-
+    #acceptor_quality = acceptor(env, ["work/acceptor_quality/%s_%s.txt" % (language, x) for x in ["good", "bad"]], training)
 
     # good, bad = acceptor(env, ["work/oov_word_acceptance/%s_%s_small_eval.txt.gz" % (type, language) for type in ["good", "bad"]], small_oov)
     # oov_eval_quality[(language, "small")] = [small_oov, good, bad]
