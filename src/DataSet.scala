@@ -42,7 +42,7 @@ class DataSet(val sentences : Seq[Seq[(Int, Option[Int], Seq[Int])]],
 
   def save(out : Writer) : Unit = {
     val top = 
-    <xml>
+    <dataset>
       <preamble>
 	<analysis_inventory>
 	{
@@ -70,8 +70,7 @@ class DataSet(val sentences : Seq[Seq[(Int, Option[Int], Seq[Int])]],
 	}
 	</word_inventory>
       </preamble>
-      <datasets>
-	<dataset>
+	<sentences>
 	{
 	  sentences.map{
 	    s =>
@@ -102,10 +101,9 @@ class DataSet(val sentences : Seq[Seq[(Int, Option[Int], Seq[Int])]],
 	      </sentence>
 	  }
 	}
-	</dataset>
-      </datasets>
-    </xml>
-    XML.write(out, top, "utf-8", false, new DocType("xml", new SystemID(""), Seq()))
+	</sentences>
+    </dataset>
+    XML.write(out, top, "utf-8", false, null)
   }   
 }
 

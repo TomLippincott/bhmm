@@ -200,27 +200,14 @@ def tiger_sentences(sources):
             retval.append([(l.get("word"), l.get("pos")) for l in s.getiterator("t")])
     return retval
 
-def evaluate_morphology(target, source, env):
-    with meta_open(source[0].rstr()) as gold_fd, meta_open(source[1].rstr()) as pred_fd:
-        gold = DataSet.from_stream(gold_fd)
-        pred = DataSet.from_stream(pred_fd)
-        gold_analyses = gold.get_analyses()
-        pred_analyses = pred.get_analyses()
-    with meta_open(target[0].rstr(), "w") as ofd:
-        ofd.write("%f\n" % 1.0)
-    return None
-
-def evaluate_tagging(target, source, env):
-    return None
-
-def dataset_to_emma(target, source, env):
-    with meta_open(source[0].rstr()) as ifd:
-        data = DataSet.from_stream(ifd)
-    with meta_open(target[0].rstr(), "w") as ofd:
-        for word, analyses in sorted(data.get_analyses().iteritems()):
-            x = "%s\t%s\n" % (word, ", ".join([" ".join(["%s:NULL" % m[1] for m in a]) for a in analyses]))
-            ofd.write(x.encode("utf-8"))
-    return None
+# def dataset_to_emma(target, source, env):
+#     with meta_open(source[0].rstr()) as ifd:
+#         data = DataSet.from_stream(ifd)
+#     with meta_open(target[0].rstr(), "w") as ofd:
+#         for word, analyses in sorted(data.get_analyses().iteritems()):
+#             x = "%s\t%s\n" % (word, ", ".join([" ".join(["%s:NULL" % m[1] for m in a]) for a in analyses]))
+#             ofd.write(x.encode("utf-8"))
+#     return None
 
 
 def morfessor_to_tripartite(target, source, env):
@@ -272,41 +259,26 @@ def xml_to_sadegh_emitter(target, source, env):
     #new_name = "%s_for_sadegh.txt" % name.split(".")[0]
     return target, source #os.path.join(path, new_name), source
 
-def random_segmentations(target, source, env):
-    with meta_open(source[0].rstr()) as ifd:
-        d = DataSet.from_stream(ifd)
-        d.indexToAnalysis = {}
-        for i, w in d.indexToWord.iteritems():
-            stem_length = randint(1, len(w))
-            prefix_length = randint(0, len(w) - stem_length)
-            suffix_length = randint(0, len(w) - (stem_length + prefix_length))
-            prefix = w[:prefix_length]
-            stem = w[prefix_length:prefix_length + stem_length]
-            suffix = w[prefix_length + stem_length:]
-            d.indexToAnalysis[i] = [({}, x) for x in [prefix, stem, suffix] if len(x) > 0]
-        d.sentences = [[(w, t, [w]) for w, t, a in s] for s in d.sentences]
-    with meta_open(target[0].rstr(), "w") as ofd:
-        d.write(ofd)
-    return None
-
-def random_tags(target, source, env):
-    return None
-
 def collate_results(target, source, env):
     data = {}
-    for k, v in env["MORPH_RESULTS"].iteritems():
+    for k, v in env["MORPHOLOGY_RESULTS"].iteritems():
         with meta_open(v[0].rstr()) as ifd:
-            precision, recall, fscore = re.match(r".*precision\s*:\s*(\S+)\s+recall\s*:\s*(\S+)\s+fmeasure\s*:\s*(\S+).*", ifd.read(), re.M|re.S).groups()
-            data[k] = [float(precision), float(recall), float(fscore)]
-    for k, v in env["TAG_RESULTS"].iteritems():
-        pass
-        #with meta_open(v[0].rstr()) as ifd:
-        #    pass
-            #precision, recall, fscore = re.match(r".*precision\s*:\s*(\S+)\s+recall\s*:\s*(\S+)\s+fmeasure\s*:\s*(\S+).*", ifd.read(), re.M|re.S).groups()
-            #data[k] = [float(precision), float(recall), float(fscore)]
+            names, values = [x.strip().split("\t") for x in ifd][0:2]
+            data[k] = {n : "%.3f" % float(v) for n, v in zip(names, values)}
+    for k, v in env["TAGGING_RESULTS"].iteritems():
+        with meta_open(v[0].rstr()) as ifd:
+            names, values = [x.strip().split("\t") for x in ifd][0:2]
+            if k in data:
+                data[k].update({n : "%.3f" % float(v) for n, v in zip(names, values)})
+            else:
+                data[k] = {n : "%.3f" % float(v) for n, v in zip(names, values)}
     with meta_open(target[0].rstr(), "w") as ofd:
-        ofd.write("\t".join(["Method", "Language", "Precision", "Recall", "F-Score"]) + "\n")
-        ofd.write("\n".join(["\t".join(list(k) + ["%.3f" % x for x in v]) for k, v in sorted(data.iteritems(), lambda x, y : cmp((x[0][1], x[0][0]), (y[0][1], y[0][0])))]) + "\n")
+        properties = ["Lang", "Method", "Units"]
+        names = sorted(set(sum([x.keys() for x in data.values()], [])))
+        ofd.write("\t".join(properties + names) + "\n")
+        for k, v in data.iteritems():
+            k = {"METHOD" : k[1], "LANG" : k[0], "UNITS" : k[2].split("-")[0]}
+            ofd.write("\t".join([k.get(p.upper(), "").title() for p in properties] + [v.get(n, "") for n in names]) + "\n")
     return None
 
 def create_subset(target, source, env):
@@ -361,13 +333,10 @@ def TOOLS_ADD(env):
             #                                       get_full_training=babel_full_training,
             #                                       get_development=babel_development,
             #                                       get_analyses=generic_analyses)),                                                   
-            "EvaluateMorphology" : Builder(action="python bin/EMMA2.py -g ${SOURCES[0]} -p ${SOURCES[1]} > ${TARGET}"),
-            "EvaluateTagging" : Builder(action=evaluate_tagging),
-            "DatasetToEmma" : Builder(action=dataset_to_emma),
+            #"EvaluateMorphology" : Builder(action="python bin/EMMA2.py -g ${SOURCES[0]} -p ${SOURCES[1]} > ${TARGET}"),
+            #"DatasetToEmma" : Builder(action=dataset_to_emma),
 
             "XMLToSadegh" : Builder(action=xml_to_sadegh, emitter=xml_to_sadegh_emitter),
-            "RandomSegmentations" : Builder(action=random_segmentations),
-            "RandomTags" : Builder(action=random_tags),
             "CollateResults" : Builder(action=collate_results),
             "CreateSubset" : Builder(action=create_subset),
             "MorfessorToTripartite" : Builder(action=morfessor_to_tripartite),

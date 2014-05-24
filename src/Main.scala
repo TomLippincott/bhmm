@@ -1,5 +1,9 @@
 package bhmm
 
+import java.io.OutputStreamWriter
+import java.util.zip._
+import java.io.File
+import java.io._
 import java.util.HashMap
 import java.util.Vector
 import java.util.Date
@@ -57,6 +61,12 @@ object Main{
 	  nextOption(map ++ Map('mode -> value), tail)
 	case "--token-based" :: tail =>
 	  nextOption(map ++ Map('typeBased -> false), tail)
+	case "--num-burnins" :: value :: tail =>
+	  nextOption(map ++ Map('numBurnins -> value.toInt), tail)
+	case "--num-samples" :: value :: tail =>
+	  nextOption(map ++ Map('numSamples -> value.toInt), tail)
+	case "--save-every" :: value :: tail =>
+	  nextOption(map ++ Map('saveEvery -> value.toInt), tail)
 
 	// options for unsupervised tagger
 	case "--markov" :: value :: tail =>
@@ -65,10 +75,6 @@ object Main{
         //  nextOption(map ++ Map('numSentences -> value.toInt), tail)	  
 	case "--num-tags" :: value :: tail =>
 	  nextOption(map ++ Map('numTags -> value.toInt) ++ Map('wordParams -> value.toInt), tail)
-	case "--num-burnins" :: value :: tail =>
-	  nextOption(map ++ Map('numBurnins -> value.toInt), tail)
-	case "--num-samples" :: value :: tail =>
-	  nextOption(map ++ Map('numSamples -> value.toInt), tail)
 	case "--transition-prior" :: value :: tail =>
 	  nextOption(map ++ Map('transitionPrior -> value.toDouble), tail)
 	case "--symmetric-transition-prior" :: tail =>
@@ -154,10 +160,11 @@ object Main{
 
     // set default argument values
     val options = nextOption(Map('mode -> "joint",
-				 'markov -> 2,
-				 'numTags -> 10,
 				 'numBurnins -> 1,
 				 'numSamples -> 10,
+				 'saveEvery -> 1,
+				 'markov -> 2,
+				 'numTags -> 10,
 				 'transitionPrior -> .1,
 				 'symmetricTransitionPrior -> false,
 				 'emissionPrior -> .1,
@@ -343,17 +350,24 @@ object Main{
     for(i <- 1 to numBurnins){
       logger.info("burnin #%d".format(i))
       model.sample()
-      //logger.fine("Joint latent probability: %s".format(model.totalProbability()))
       logger.info("%s".format(model))
     }
     logger.info("starting sampling")
+    val out = new OutputStreamWriter(if(output.endsWith("gz")){ new GZIPOutputStream(new BufferedOutputStream(new FileOutputStream(output))) }
+				     else{ new BufferedOutputStream(new FileOutputStream(output)) })
+    out.write("<xml>")
     for(i <- 1 to numSamples){
+      val save = (i % (options.get('saveEvery).get.asInstanceOf[Int])) == 0
       logger.info("sample #%d".format(i))
       model.sample()
-      //logger.fine("Joint latent probability: %s".format(model.totalProbability()))
-      logger.info("%s".format(model))
+      logger.info("%s".format(model))      
+      if(save == true){ 
+	logger.info("saving model to %s".format(output))
+	model.save(out) 
+      }
     }
-    model.save(output)
-
+    out.write("</xml>")
+    out.flush()
+    out.close()
   }
 }

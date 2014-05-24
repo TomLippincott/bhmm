@@ -1,2 +1,5 @@
 #EMNLP_DATA_PATH = "/export/projects/nlp/BABEL/backup/msr/emnlp2014_data"
 #EMNLP_EXPERIMENTS_PATH = "/export/projects/nlp/BABEL/backup/msr/emnlp2014_experiments"
+#EMNLP_TOOLS_PATH = "/export/projects/nlp/BABEL/backup/msr/emnlp2014_tools"
+#MORPHOLOGY_PATH = ""
+#LOCAL_PATH = ""
