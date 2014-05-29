@@ -27,17 +27,19 @@ vars.AddVariables(
     ("EMNLP_EXPERIMENTS_PATH", "", False),
     ("EMNLP_TOOLS_PATH", "", False),
     ("LOCAL_PATH", "", False),
-
+    ("LANGUAGES", "", []),
+    
     # parameters shared by all models
     ("NUM_BURNINS", "", 1),
     ("NUM_SAMPLES", "", 1),
     ("SAVE_EVERY", "", 1),
+    ("TOKEN_BASED", "", [True, False]),
 
     # tagging parameters
-    ("NUM_TAGS", "", 10),
-    ("MARKOV", "", 2),
-    ("TRANSITION_PRIOR", "", .01),
-    ("EMISSION_PRIOR", "", .01),
+    ("NUM_TAGS", "", 45),
+    ("MARKOV", "", 1),
+    ("TRANSITION_PRIOR", "", .1),
+    ("EMISSION_PRIOR", "", .1),
     BoolVariable("SYMMETRIC_TRANSITION_PRIOR", "", True),
     BoolVariable("SYMMETRIC_EMISSION_PRIOR", "", True),
 
@@ -95,21 +97,27 @@ morphology_parameters = " ".join(["--%s ${%s}" % (x.lower().replace("_", "-"), x
                                  ["${%s==True and '--%s' or ''}" % (x, x.lower().replace("_", "-")) for x in ["MULTIPLE_STEMS", "SUFFIXES", "PREFIXES", "SUBMORPHS", "NON_PARAMETRIC", "HIERARCHICAL", "USE_HEURISTICS", "DERIVATIONAL", "INFER_PYP"]])
 
 # compile the adaptor grammar and BHMM code into a single jar file
-#java_classes = env.Java(pjoin("work", "classes"), pjoin(env["MORPHOLOGY_PATH"], "src"))
-#scala_classes = env.Scala(env.Dir(pjoin("work", "classes", "bhmm")), [env.Dir("src")] + java_classes)
-#env.Depends(scala_classes, java_classes)
-#mt = env.Jar(pjoin("work", "morphological_tagger.jar"), "work/classes", JARCHDIR="work/classes")
+java_classes = env.Java(pjoin("work", "classes"), pjoin(env["MORPHOLOGY_PATH"], "src"))
+scala_classes = env.Scala(env.Dir(pjoin("work", "classes", "bhmm")), [env.Dir("src")] + java_classes)
+env.Depends(scala_classes, java_classes)
+mt = env.Jar(pjoin("work", "morphological_tagger.jar"), "work/classes", JARCHDIR="work/classes")
 
 # iterate over each language
 data_sets = {}
 tagging_results = {}
 morphology_results = {}
 oov_eval_quality = {}
-for language in ["english", "turkish", "hebrew", "german", "arabic"]:
+
+for language in env["LANGUAGES"]:
     
+    # data set
+    if os.path.exists(env.subst(os.path.join("${EMNLP_DATA_PATH}", language, "pos_cap", "train.pos"))):
+        data = env.subst(os.path.join("${EMNLP_DATA_PATH}", language, "pos_cap", "train.pos"))
+    else:
+        data = env.subst(os.path.join("${EMNLP_DATA_PATH}", language, "pos", "train.pos"))
+
     # convert training data to XML format
-    training = env.CONLLishToXML(os.path.join("work", "data", language, "train.xml.gz"), 
-                                 os.path.join("${EMNLP_DATA_PATH}", language, "pos", "train.pos"))
+    training = env.CONLLishToXML(os.path.join("work", "data", language, "train.xml.gz"), data)
     
     # if we have gold standard morphology, add it in
     if os.path.exists("data/%s_morphology.txt" % language):
@@ -133,21 +141,20 @@ for language in ["english", "turkish", "hebrew", "german", "arabic"]:
     
     # for each expansion method
     reductions = {}
-    for generation_method in ["adaptor", "iadaptor", "bbg"]:
-        
+    for generation_method in ["joint", "adaptor", "iadaptor", "bbg"]:
+        continue
         # data file from Sadegh
-        expansion = env.Glob("${EMNLP_EXPERIMENTS_PATH}/%s/expansion/%s*.ex" % (language, generation_method))[0]
-        
+        expansion = env.Glob("${EMNLP_EXPERIMENTS_PATH}/%s/expansion/%s.*.gz" % (language, generation_method))[0] #, generation_method))[0]
+
         # filter based on acceptor
         #accepted, rejected = acceptor(env, ["work/expansions/${LANGUAGE}/%s/%s.txt" % (generation_method, x) for x in ["accepted", "rejected"]], expansion, LANGUAGE=language)
-        
+
         # split into different reranking methods
         expansions = {k : v for k, v in zip(["nrr", "tri", "tri_bound"],
                                             env.SplitExpansions(["work/expansions/${LANGUAGE}/%s/%s.txt" % (generation_method, x) for x in ["nrr", "tri", "tri_bound"]], 
                                                                 [expansion, Value(100000)], LANGUAGE=language))}
-        
+        #continue        
         # create files tracking performance across N bins (token-based recall from gigaword, type-based precision from acceptor)
-
         for rank_method, expansion_file in expansions.iteritems():
             for size, oov in zip(["big", "small"], [big_oov, small_oov]):
                 if size == "big" and rank_method == "tri":
@@ -156,28 +163,26 @@ for language in ["english", "turkish", "hebrew", "german", "arabic"]:
                                                                                           [training, expansion_file, oov, accepted, env.Value(1000)])
                 
     # plot reductions
-    env.PlotReduction("work/plots/${LANGUAGE}.png", reductions.values(), REDUCTIONS=reductions, LANGUAGE=language)
-        
-    # plot reductions (first 100 buckets)
-    #env.PlotReduction("work/plots/${LANGUAGE}_${GENERATION_METHOD}_zoomed.png", 
-    #                  [env.Value(100)] + reductions.values(), REDUCTIONS=reductions, LANGUAGE=language, GENERATION_METHOD=generation_method)
-    continue
+    #env.PlotReduction("work/plots/${LANGUAGE}.png", reductions.values(), REDUCTIONS=reductions, LANGUAGE=language)
+
+    #continue
     #
     # Morfessor experiments
     #
-    output = env.TrainMorfessor("work/xml_formatted/%s_morfessor.xml.gz" % (language), training)
-    
-    for token_based in [True, False]:        
+    #morfessor_segmentations = env.TrainMorfessor("work/xml_formatted/%s_morfessor.xml.gz" % (language), training)
+    #morphology_results[(language, "morf", "CAT")] = env.EMMAScore("work/evaluations/%s_morph_morfessor.txt" % (language), training, morfessor_segmentations[0])
+
+    for token_based in env["TOKEN_BASED"]:
 
         style_name = (token_based and "token-based") or "type-based"
 
         #
         # Random experiment
         #
-        random_segmentations = env.RandomSegmentations("work/xml_formatted/%s_%s_random_morph.xml.gz" % (language, style_name), [training, env.Value(style_name)])
-        random_tags = env.RandomTags("work/xml_formatted/%s_%s_random_tag.xml.gz" % (language, style_name), [training, env.Value(style_name)])
-        tagging_results[(language, "random", style_name)] = env.EvaluateTagging("work/results/%s_tagging_random_%s.txt" % (language, style_name), [training, random_tags])
-        morphology_results[(language, "random", style_name)] = env.EMMAScore("work/evaluations/%s_morph_random_%s.txt" % (language, style_name), training, random_segmentations[0])
+        #random_segmentations = env.RandomSegmentations("work/xml_formatted/%s_%s_random_morph.xml.gz" % (language, style_name), [training, env.Value(style_name)])
+        #random_tags = env.RandomTags("work/xml_formatted/%s_%s_random_tag.xml.gz" % (language, style_name), [training, env.Value(style_name)])
+        #tagging_results[(language, "random", style_name)] = env.EvaluateTagging("work/results/%s_tagging_random_%s.txt" % (language, style_name), [training, random_tags])
+        #morphology_results[(language, "random", style_name)] = env.EMMAScore("work/evaluations/%s_morph_random_%s.txt" % (language, style_name), training, random_segmentations[0])
 
         #
         # Tagging experiment
@@ -186,23 +191,24 @@ for language in ["english", "turkish", "hebrew", "german", "arabic"]:
                                             [mt, env.Value("bhmm.Main"), training],
                                             ARGUMENTS="%s %s" % (common_parameters, tagging_parameters), MODE="tagging", TOKEN_BASED=token_based)    
         tagging_results[(language, "tagger", style_name)] = env.EvaluateTagging("work/results/%s_tagging_%s.txt" % (language, style_name), [training, tagging])
+        env.TopWordsByTag("work/top_words/%s_%s.txt" % (language, style_name), tagging)
 
         #
         # Morphology experiments
         #
-        morphology, morphology_log = env.RunScala(["work/xml_formatted/%s_ag-morph_%s.xml.gz" % (language, style_name), "work/logs/%s_%s_ag-morph.txt" % (language, style_name)], 
-                                                  [mt, env.Value("bhmm.Main"), training],
-                                                  ARGUMENTS="%s %s" % (common_parameters, morphology_parameters), MODE="morphology", TOKEN_BASED=token_based)        
-        morphology_results[(language, "morph", style_name)] = env.EMMAScore("work/results/%s_morphology_%s.txt" % (language, style_name), training, morphology)
-        continue
+        #morphology, morphology_log = env.RunScala(["work/xml_formatted/%s_ag-morph_%s.xml.gz" % (language, style_name), "work/logs/%s_%s_ag-morph.txt" % (language, style_name)], 
+        #                                          [mt, env.Value("bhmm.Main"), training],
+        #                                          ARGUMENTS="%s %s" % (common_parameters, morphology_parameters), MODE="morphology", TOKEN_BASED=token_based)        
+        #morphology_results[(language, "morph", style_name)] = env.EMMAScore("work/results/%s_morphology_%s.txt" % (language, style_name), training, morphology)
+
         #
         # Joint experiments
         #
-        joint, joint_log = env.RunScala(["work/xml_formatted/%s_joint_%s.xml.gz" % (language, style_name), "work/logs/%s_joint-%s.log" % (language, style_name)], 
-                             [mt, env.Value("bhmm.Main"), training],
-                             ARGUMENTS="%s %s %s" % (common_parameters, tagging_parameters, morphology_parameters), MODE="joint", TOKEN_BASED=token_based)
-        tagging_results[(language, "joint", style_name)] = env.EvaluateTagging("work/results/%s_joint_%s.txt" % (language, style_name), [training, joint])
-        morphology_results[(language, "joint", style_name)] = env.EvaluateMorphology("work/results/%s_joint_%s.txt" % (language, style_name), [training, joint])
-
-env.CollateResults("work/results/summary.txt", morphology_results.values() + tagging_results.values(), MORPHOLOGY_RESULTS=morphology_results, TAGGING_RESULTS=tagging_results)
-env.CollateOOVQuality("work/oov_word_acceptance/summary.txt", sum(oov_eval_quality.values(), []), FILES=oov_eval_quality)
+        #joint, joint_log = env.RunScala(["work/xml_formatted/%s_joint_%s.xml.gz" % (language, style_name), "work/logs/%s_joint-%s.log" % (language, style_name)], 
+        #                     [mt, env.Value("bhmm.Main"), training],
+        #                     ARGUMENTS="%s %s %s" % (common_parameters, tagging_parameters, morphology_parameters), MODE="joint", TOKEN_BASED=token_based)
+        #tagging_results[(language, "joint", style_name)] = env.EvaluateTagging("work/results/%s_joint-tagging_%s.txt" % (language, style_name), [training, joint])
+        #morphology_results[(language, "joint", style_name)] = env.EMMAScore("work/results/%s_joint-morphology_%s.txt" % (language, style_name), training, joint)
+        #env.XMLToSadegh("work/for_sadegh/%s_%s.txt" % (language, style_name), joint)
+#env.CollateResults("work/results/summary.txt", morphology_results.values() + tagging_results.values(), MORPHOLOGY_RESULTS=morphology_results, TAGGING_RESULTS=tagging_results)
+#env.CollateOOVQuality("work/oov_word_acceptance/summary.txt", sum(oov_eval_quality.values(), []), FILES=oov_eval_quality)

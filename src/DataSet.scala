@@ -23,9 +23,16 @@ class DataSet(val sentences : Seq[Seq[(Int, Option[Int], Seq[Int])]],
   val analysisToIndex = indexToAnalysis.map(_.swap)
   def words() : Set[String] = wordToIndex.keys.toSet
   override def toString() : String = "DataSet: %d sentences, %d tokens, %d word types, %d analyses, %d tags".format(sentences.length, sentences.map(_.length).sum, wordToIndex.size, analysisToIndex.size, tagToIndex.size)
+  def print() : String = sentences.map{ s => s.map{ l => "%s/%s".format(indexToWord(l._1), 
+									   indexToTag.getOrElse(l._2.getOrElse(-1), "-")//, 
+									//if(l._3.size == 0){ "-" }else{
+									 //    l._3.map{a => "%s".format(indexToAnalysis(a).mkString("+"))}.mkString(", ")
+									  // }
+									 )}.mkString(" ")}.mkString("\n")
   def apply(i : Int) : Seq[(Int, Option[Int], Seq[Int])] = sentences(i)
   def length : Int = sentences.length
   def iterator : Iterator[Seq[(Int, Option[Int], Seq[Int])]] = sentences.iterator
+  //lazy wordLocations : Map[
   //def relevantLocations(wordId : Int) : Seq[Int] = {
   /*
   lazy val relevantLocations : Map[Int, Seq[Int]] = {
@@ -126,9 +133,9 @@ object DataSet{
   
   def fromXML(src : InputStream, tagMap : Map[String, String] = Map(), trainOnly : Boolean=true) : (Sentences, Map[Int, String], Map[Int, String], Map[Int, Seq[String]]) = {
     val xml = XML.load(src)
-    val words = (xml \ "preamble" \ "word_inventory" \ "entry").map(w => ((w \ "@id").text.toInt, w.text)).toMap
-    val tags = (xml \ "preamble" \ "tag_inventory" \ "entry").map(t => ((t \ "@id").text.toInt, t.text)).toMap
-    val analyses = (xml \ "preamble" \ "analysis_inventory" \ "entry").map(a => ((a \ "@id").text.toInt, (a \ "morph").map(_.text))).toMap
+    val words = (xml \ "dataset" \ "preamble" \ "word_inventory" \ "entry").map(w => ((w \ "@id").text.toInt, w.text)).toMap
+    val tags = (xml \ "dataset" \ "preamble" \ "tag_inventory" \ "entry").map(t => ((t \ "@id").text.toInt, t.text)).toMap
+    val analyses = (xml \ "dataset" \ "preamble" \ "analysis_inventory" \ "entry").map(a => ((a \ "@id").text.toInt, (a \ "morph").map(_.text))).toMap
     val sentences = (xml \\ "sentence").map(s => (s \ "location").map{
       l => 
 	val wordId = (l \ "word" \ "@id").text.toInt

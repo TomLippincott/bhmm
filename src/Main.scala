@@ -19,8 +19,9 @@ object Main{
 
   class MyFormatter extends Formatter{
     def format(r : LogRecord) : String = {
-      val d = new Date(r.getMillis)
-      d.toString + ": " + r.getMessage + "\n"
+      r.getMessage + "\n"
+      //val d = new Date(r.getMillis)
+      //d.toString + ": " + r.getMessage + "\n"
     }
   }
   
@@ -229,7 +230,7 @@ object Main{
 
     // load data
     val dataSet = DataSet.fromFile(input)
-    logger.info("%s".format(dataSet))
+    logger.finest("%s".format(dataSet.print()))
 
     // construct appropriate model
     val model = (options.get('mode).get.asInstanceOf[String], options.get('typeBased).get.asInstanceOf[Boolean]) match{
@@ -346,11 +347,13 @@ object Main{
     }
 
     //model.batchInitialize()
+    //logger.info("%s".format(model))
     logger.info("starting burn-in")
     for(i <- 1 to numBurnins){
       logger.info("burnin #%d".format(i))
       model.sample()
-      logger.info("%s".format(model))
+      //logger.finest("%s".format(model.complete(dataSet).print()))
+      //logger.info("%s".format(model))
     }
     logger.info("starting sampling")
     val out = new OutputStreamWriter(if(output.endsWith("gz")){ new GZIPOutputStream(new BufferedOutputStream(new FileOutputStream(output))) }
@@ -360,9 +363,10 @@ object Main{
       val save = (i % (options.get('saveEvery).get.asInstanceOf[Int])) == 0
       logger.info("sample #%d".format(i))
       model.sample()
-      logger.info("%s".format(model))      
+      //logger.finest("%s".format(model.complete(dataSet).print()))
+      //logger.info("%s".format(model))      
       if(save == true){ 
-	logger.info("saving model to %s".format(output))
+	//logger.info("saving model to %s".format(output))
 	model.save(out) 
       }
     }

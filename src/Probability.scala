@@ -29,8 +29,8 @@ class Probability(val v : Double) extends Numeric[Probability] with Ordered[Prob
   def toFloat(x : Probability) : Float = sys.error("tried to convert a Probability to a Float")
   def toInt(x : Probability) : Int = sys.error("tried to convert a Probability to an Int")
   def toLong(x : Probability) : Long = sys.error("tried to convert a Probability to a Long")
-  def negate(x : Probability) : Probability = sys.error("")
-  override def toString = "Prob(%f/%s)".format(p, if(v == Double.NegativeInfinity){ "-" }else{ "%f".format(v) })
+  def negate(x : Probability) : Probability = sys.error("tried to negate a Probability")
+  override def toString = "Prob(%.2f/%s)".format(p, if(v == Double.NegativeInfinity){ "-" }else{ "%.2f".format(v) })
 }
 
 object Probability{

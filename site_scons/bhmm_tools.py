@@ -230,10 +230,15 @@ def xml_to_sadegh(target, source, env):
     counts = {}
     lookup = {"PRE" : "a", "STM" : "b", "SUF" : "c"}
     with meta_open(source[0].rstr()) as ifd:
+        #data = DataSet.from_stream(ifd)[0]
+        #for i, a in data.indexToAnalysis.iteritems():
+        #    morphs = [(x.text, lookup[x.get("type")[0:3]]) for m in a]
         xml = et.parse(ifd)
         for i in xml.findall("//analysis_inventory/entry"):
             index = int(i.get("id"))
             morphs = [(x.text, lookup[x.get("type")[0:3]]) for x in i.findall("morph")]
+            if any([re.match(r".*\d.*", x) for (x, a) in morphs]):
+                continue
             intervals = [len(y) for y in re.match(r"^(a*)([^c]+)(.*?)$", "".join([x[1] for x in morphs])).groups()]            
             prefix = "".join([x[0] for x in morphs[0:intervals[0]]])
             stem = "".join([x[0] for x in morphs[intervals[0]:intervals[0] + intervals[1]]])
@@ -243,15 +248,22 @@ def xml_to_sadegh(target, source, env):
             if suffix == "":
                 suffix = "<epsilon>"
             analyses[index] = (prefix, stem, suffix)
-        if env.get("LIMITED", False):
-            data = xml.findall("//dataset[@type='limited']//analysis")
-        else:
-            data = xml.findall("//dataset//analysis")
-        for a in data:
-            index = int(a.get("id"))
-            counts[index] = counts.get(index, 0) + 1
+        for l in xml.findall("//location"):
+            t = int(l.find("tag").get("id"))
+            a = int(l.find("analyses/analysis").get("id"))
+            if a not in analyses:
+                continue
+            counts[(t, a)] = counts.get((t, a), 0) + 1
+            pass
+    #     if env.get("LIMITED", False):
+    #         data = xml.findall("//dataset[@type='limited']//analysis")
+    #     else:
+    #         data = xml.findall("//dataset//analysis")
+    #     for a in data:
+    #         index = int(a.get("id"))
+    #         counts[index] = counts.get(index, 0) + 1
     with meta_open(target[0].rstr(), "w") as ofd:
-        ofd.write("\n".join(["%d\t1\t%s" % (counts[i], "\t".join(analyses[i]).encode("utf-8")) for i in counts.keys()]))
+        ofd.write("\n".join(["%d\t%d\t%s" % (c, t + 1, "\t".join(analyses[a]).encode("utf-8")) for (t, a), c in counts.iteritems()]))
     return None
 
 def xml_to_sadegh_emitter(target, source, env):
@@ -293,7 +305,7 @@ def create_subset(target, source, env):
 
 def top_words_by_tag(target, source, env):
     with meta_open(source[0].rstr()) as ifd:
-        data = DataSet.from_stream(ifd)
+        data = DataSet.from_stream(ifd)[-1]
     counts = numpy.zeros(shape=(len(data.indexToWord), len(data.indexToTag)))
     for sentence in data.sentences:
         for w, t, aa in sentence:
@@ -306,9 +318,6 @@ def top_words_by_tag(target, source, env):
             word_counts = counts[:, tag_id] #.argsort()
             indices = [(i, word_counts[i]) for i in reversed(word_counts.argsort())][0:keep]
             ofd.write(" ".join(["%s-%.2f-%.2f" % (data.indexToWord[i], float(c) / tag_total, float(c) / word_totals[i]) for i, c in indices]) + "\n")
-            #print tag_total, word_counts.sum()
-            
-        pass
     return None
 
 def conllish_to_xml(target, source, env):
