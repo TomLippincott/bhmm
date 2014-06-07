@@ -8,10 +8,8 @@ import java.util.HashMap
 import java.util.Vector
 import java.util.Date
 import java.util.logging.{Level, Logger, Formatter, FileHandler, ConsoleHandler, LogRecord}
-import bhmm.Test.{runTests}
 import bhmm.data.DataSet
 import bhmm.models.{TokenBasedTaggingModel, TypeBasedTaggingModel, TokenBasedMorphologyModel, TypeBasedMorphologyModel, TokenBasedJointModel, TypeBasedJointModel}
-import bhmm.evaluation.Intrinsic
 import AdaptorGrammar.PitmanYorPrior
 import Distributions.{GammaDistribution, BetaDistribution}
 
