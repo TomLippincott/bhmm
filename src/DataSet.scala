@@ -21,32 +21,14 @@ class DataSet(val sentences : Seq[Seq[(Int, Option[Int], Seq[Int])]],
   val wordToIndex = indexToWord.map(_.swap)
   val tagToIndex = indexToTag.map(_.swap)
   val analysisToIndex = indexToAnalysis.map(_.swap)
-  def words() : Set[String] = wordToIndex.keys.toSet
+  lazy val words : Seq[String] = wordToIndex.keys.toList
   override def toString() : String = "DataSet: %d sentences, %d tokens, %d word types, %d analyses, %d tags".format(sentences.length, sentences.map(_.length).sum, wordToIndex.size, analysisToIndex.size, tagToIndex.size)
   def print() : String = sentences.map{ s => s.map{ l => "%s/%s".format(indexToWord(l._1), 
-									   indexToTag.getOrElse(l._2.getOrElse(-1), "-")//, 
-									//if(l._3.size == 0){ "-" }else{
-									 //    l._3.map{a => "%s".format(indexToAnalysis(a).mkString("+"))}.mkString(", ")
-									  // }
-									 )}.mkString(" ")}.mkString("\n")
+									indexToTag.getOrElse(l._2.getOrElse(-1), "-")
+								      )}.mkString(" ")}.mkString("\n")
   def apply(i : Int) : Seq[(Int, Option[Int], Seq[Int])] = sentences(i)
   def length : Int = sentences.length
   def iterator : Iterator[Seq[(Int, Option[Int], Seq[Int])]] = sentences.iterator
-  //lazy wordLocations : Map[
-  //def relevantLocations(wordId : Int) : Seq[Int] = {
-  /*
-  lazy val relevantLocations : Map[Int, Seq[Int]] = {
-    (0 until assignments.length).filter{
-      i =>
-	assignments(i) match{
-	  case Assigned(w, t) if w == wordId => true
-	  case Unassigned(w) if w == wordId => true
-	  case _ => false
-	}
-    }
-  }
-  */
-
   def save(out : Writer) : Unit = {
     val top = 
     <dataset>
@@ -145,5 +127,17 @@ object DataSet{
 	(wordId, tagId, analysisIds)
     })
     (sentences, words, tags, analyses)
+  }
+
+  def toLowerCase(data : DataSet) : DataSet = {
+    val oldIndexToOldWord = data.indexToWord
+    val oldIndexToNewWord = oldIndexToOldWord.mapValues(_.toLowerCase)
+    val wordToIndex = oldIndexToNewWord.values.toSet.zipWithIndex.toMap
+    val indexToWord = wordToIndex.map(_.swap)
+    val sentences = data.sentences.map{
+      s =>
+	s.map{ l => (wordToIndex(oldIndexToNewWord(l._1)), l._2, l._3) }
+    }
+    new DataSet(sentences, indexToWord, data.indexToTag, data.indexToAnalysis)
   }
 }

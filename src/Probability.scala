@@ -1,5 +1,7 @@
 package bhmm.types
 
+import java.lang.Math
+
 class Probability(val v : Double) extends Numeric[Probability] with Ordered[Probability]{
   def p = Probability.expbase(v)
   def compare(x : Probability, y : Probability) : Int = x.v.compare(y.v)
@@ -34,7 +36,7 @@ class Probability(val v : Double) extends Numeric[Probability] with Ordered[Prob
 }
 
 object Probability{
-  val base = 2
+  val base = Math.E
   def logbase(x: Double) = scala.math.log(x) / scala.math.log(base)
   def expbase(x: Double) = scala.math.pow(base.toDouble, x)
   def fromProb(x : Double) : Probability = new Probability(logbase(x))

@@ -25,22 +25,50 @@ object Main{
     }
   }
   
-  val usage = ""
-  /*
-  All arguments besides input and output are optional:
-    --config
+  val usage = """
+  All arguments besides input and output are optional.
+
+  General options
+    --help
+    --mode=tagging|morphology|joint
     --input
     --output
-    --markov
-    --num-sentences
-    --num-tags
+    --log-file
+    --token-based
     --num-burnins
     --num-samples
+    --save-every
+  Tagging options
+    --lower-case-tagging
+    --markov
+    --num-tags
     --transition-prior
+    --symmetric-transition-prior
     --emission-prior
-    --help
-  """
-  */
+    --symmetric-emission-prior
+    --optimize-every
+  Morphology options
+    --lower-case-morphology
+    --prefix-prior 
+    --tag-prior 
+    --base-prior 
+    --word-prior 
+    --suffix-prior 
+    --submorph-prior
+    --adaptor-prior-a 
+    --adaptor-prior-b 
+    --rule-prior
+    --cache-probability 
+    --multiple-stems 
+    --prefixes 
+    --suffixes 
+    --submorphs 
+    --non-parametric 
+    --hierarchical 
+    --use-heuristics 
+    --derivational 
+    --infer-pyp 
+    --batch"""
 
   def main(args: Array[String]){
     type OptionMap = Map[Symbol, Any]
@@ -70,10 +98,10 @@ object Main{
 	  nextOption(map ++ Map('saveEvery -> value.toInt), tail)
 
 	// options for unsupervised tagger
+	case "--lower-case-tagging" :: tail =>
+	  nextOption(map ++ Map('lowerCaseTagging -> true), tail)
 	case "--markov" :: value :: tail =>
           nextOption(map ++ Map('markov -> value.toInt), tail)	  
-	//case "--num-sentences" :: value :: tail =>
-        //  nextOption(map ++ Map('numSentences -> value.toInt), tail)	  
 	case "--num-tags" :: value :: tail =>
 	  nextOption(map ++ Map('numTags -> value.toInt) ++ Map('wordParams -> value.toInt), tail)
 	case "--transition-prior" :: value :: tail =>
@@ -84,12 +112,12 @@ object Main{
 	  nextOption(map ++ Map('emissionPrior -> value.toDouble), tail)
 	case "--symmetric-emission-prior" :: tail =>
 	  nextOption(map ++ Map('optimizeEmissionPrior -> true), tail)
-	//case "--optimize-every" :: value :: tail =>
-	//  nextOption(map ++ Map('optimizeEvery -> value.toInt), tail)
-	//case "--annealing" :: value :: tail =>
-	//  nextOption(map ++ Map('annealing -> value.toDouble), tail)
+	case "--optimize-every" :: value :: tail =>
+	  nextOption(map ++ Map('optimizeEvery -> value.toInt), tail)
 	
 	// options for adaptor grammar morphology
+	case "--lower-case-morphology" :: tail =>
+	  nextOption(map ++ Map('lowerCaseMorphology -> true), tail)
 	case "--prefix-prior" :: value :: tail =>
 	  nextOption(map ++ Map('prefixPrior -> value.toDouble), tail)
 	case "--tag-prior" :: value :: tail =>
@@ -110,9 +138,6 @@ object Main{
 	  nextOption(map ++ Map('rulePrior -> value.toDouble), tail)
 	case "--cache-probability" :: value :: tail =>
 	  nextOption(map ++ Map('cacheProbability -> value.toInt), tail)
-	//case "--word-params-prior" :: value :: tail =>
-	//  nextOption(map ++ Map('wordParams -> value.toDouble), tail)
-
 
 	case "--multiple-stems" :: tail =>
 	  nextOption(map ++ Map('multipleStems -> true), tail)
@@ -135,23 +160,10 @@ object Main{
 	case "--batch" :: tail =>
 	  nextOption(map ++ Map('batch -> true), tail)
 
-
-
-	// options for evaluation methods
-	// case "--perplexity" :: value :: tail =>
-	//   nextOption(map ++ Map('perplexity -> value.toInt), tail)
-	// case "--variation-of-information" :: value :: tail =>
-	//   nextOption(map ++ Map('variationOfInformation -> value.toInt), tail)
-	// case "--best-match" :: value :: tail =>
-	//   nextOption(map ++ Map('bestMatch -> value.toInt), tail)
-
 	// other options
 	case "--help" :: tail =>
 	  println(usage)
 	  sys.exit(0)
-	//case "--test" :: tail =>
-	//  runTests
-	//  sys.exit(0)
         case option :: tail => 
 	  println("Unknown option " + option)
 	  println(usage)
@@ -164,12 +176,15 @@ object Main{
 				 'numBurnins -> 1,
 				 'numSamples -> 10,
 				 'saveEvery -> 1,
+				 'lowerCaseTagging -> false,
 				 'markov -> 2,
 				 'numTags -> 10,
 				 'transitionPrior -> .1,
 				 'symmetricTransitionPrior -> false,
 				 'emissionPrior -> .1,
 				 'symmetricEmissionPrior -> false,
+				 'optimizeEvery -> 0,
+				 'lowerCaseMorphology -> false,
 				 'prefixPrior -> 1.0,
 				 'wordPrior -> 1.0,
 				 'suffixPrior -> 1.0,
@@ -177,7 +192,6 @@ object Main{
 				 'adaptorPriorA -> 0.0,
 				 'adaptorPriorB -> 100.0,
 				 'rulePrior -> 1.0,
-				 //'wordParams -> 1,
 				 'multipleStems -> true,
 				 'prefixes -> true,
 				 'suffixes -> true,
@@ -185,17 +199,9 @@ object Main{
 				 'nonParametric -> false,
 				 'typeBased -> true,
 				 'basePrior -> 1.0,
-				 //'w -> 1.0,
-				 //'m -> 1.0,
-				 //'gammaPriorA -> 1.0,
-				 //'gammaPriorB -> 1.0,
-				 //'betaPriorA -> 1.0,
-				 //'betaPriorB -> 1.0,
 				 'hierarchical -> false,
-				 //'burnIn -> 10,
 				 'useHeuristics -> false,
 				 'derivational -> false,
-				 //'batch -> false,
 				 'lexGen -> 0,
 				 'inferPYP -> false,
 				 'tagPrior -> .1,
@@ -240,7 +246,8 @@ object Main{
 							  options.get('transitionPrior).get.asInstanceOf[Double],
 							  options.get('emissionPrior).get.asInstanceOf[Double],
 							  options.get('symmetricTransitionPrior).get.asInstanceOf[Boolean],
-							  options.get('symmetricEmissionPrior).get.asInstanceOf[Boolean]
+							  options.get('symmetricEmissionPrior).get.asInstanceOf[Boolean],
+							  options.get('lowerCaseTagging).get.asInstanceOf[Boolean]
 							)
       case ("tagging", false) => new TokenBasedTaggingModel(dataSet,
 							    options.get('markov).get.asInstanceOf[Int],
@@ -248,7 +255,8 @@ object Main{
 							    options.get('transitionPrior).get.asInstanceOf[Double],
 							    options.get('emissionPrior).get.asInstanceOf[Double],
 							    options.get('symmetricTransitionPrior).get.asInstanceOf[Boolean],
-							    options.get('symmetricEmissionPrior).get.asInstanceOf[Boolean]
+							    options.get('symmetricEmissionPrior).get.asInstanceOf[Boolean],
+							    options.get('lowerCaseTagging).get.asInstanceOf[Boolean]
 							  )
       case ("morphology", true) => new TypeBasedMorphologyModel(dataSet,
 								options.get('numTags).get.asInstanceOf[Int],
@@ -269,7 +277,8 @@ object Main{
 								options.get('cacheProbability).get.asInstanceOf[Int],
 								options.get('useHeuristics).get.asInstanceOf[Boolean],
 								options.get('derivational).get.asInstanceOf[Boolean],
-								options.get('inferPYP).get.asInstanceOf[Boolean]
+								options.get('inferPYP).get.asInstanceOf[Boolean],
+								options.get('lowerCaseMorphology).get.asInstanceOf[Boolean]
 							      )
       case ("morphology", false) => new TokenBasedMorphologyModel(dataSet,
 								  options.get('numTags).get.asInstanceOf[Int],
@@ -290,7 +299,8 @@ object Main{
 								  options.get('cacheProbability).get.asInstanceOf[Int],
 								  options.get('useHeuristics).get.asInstanceOf[Boolean],
 								  options.get('derivational).get.asInstanceOf[Boolean],
-								  options.get('inferPYP).get.asInstanceOf[Boolean]
+								  options.get('inferPYP).get.asInstanceOf[Boolean],
+								  options.get('lowerCaseMorphology).get.asInstanceOf[Boolean]
 								)
       case (_, true) => new TypeBasedJointModel(dataSet,
       						options.get('markov).get.asInstanceOf[Int],
@@ -316,7 +326,9 @@ object Main{
 						options.get('cacheProbability).get.asInstanceOf[Int],
 						options.get('useHeuristics).get.asInstanceOf[Boolean],
 						options.get('derivational).get.asInstanceOf[Boolean],
-						options.get('inferPYP).get.asInstanceOf[Boolean]
+						options.get('inferPYP).get.asInstanceOf[Boolean],
+						options.get('lowerCaseTagging).get.asInstanceOf[Boolean],
+						options.get('lowerCaseMorphology).get.asInstanceOf[Boolean]
       					      )
       case (_, false) => new TokenBasedJointModel(dataSet,
       						  options.get('markov).get.asInstanceOf[Int],
@@ -342,18 +354,17 @@ object Main{
 						  options.get('cacheProbability).get.asInstanceOf[Int],
 						  options.get('useHeuristics).get.asInstanceOf[Boolean],
 						  options.get('derivational).get.asInstanceOf[Boolean],
-						  options.get('inferPYP).get.asInstanceOf[Boolean]
+						  options.get('inferPYP).get.asInstanceOf[Boolean],
+						  options.get('lowerCaseTagging).get.asInstanceOf[Boolean],
+						  options.get('lowerCaseMorphology).get.asInstanceOf[Boolean]
       						)
     }
 
-    //model.batchInitialize()
-    //logger.info("%s".format(model))
     logger.info("starting burn-in")
     for(i <- 1 to numBurnins){
       logger.info("burnin #%d".format(i))
       model.sample()
-      //logger.finest("%s".format(model.complete(dataSet).print()))
-      //logger.info("%s".format(model))
+      logger.info("%s".format(model))
     }
     logger.info("starting sampling")
     val out = new OutputStreamWriter(if(output.endsWith("gz")){ new GZIPOutputStream(new BufferedOutputStream(new FileOutputStream(output))) }
@@ -363,10 +374,9 @@ object Main{
       val save = (i % (options.get('saveEvery).get.asInstanceOf[Int])) == 0
       logger.info("sample #%d".format(i))
       model.sample()
-      //logger.finest("%s".format(model.complete(dataSet).print()))
-      //logger.info("%s".format(model))      
+      logger.info("%s".format(model))      
       if(save == true){ 
-	//logger.info("saving model to %s".format(output))
+	logger.info("saving model to %s".format(output))
 	model.save(out) 
       }
     }
