@@ -358,11 +358,12 @@ object Main{
       						)
     }
 
+    model.batchInitialize()
+
     logger.info("starting burn-in")
     for(i <- 1 to numBurnins){
-      logger.info("burnin #%d".format(i))
+      logger.info("burnin #%d - %s".format(i, model))
       model.sample()
-      logger.info("%s".format(model))
     }
     logger.info("starting sampling")
     val out = new OutputStreamWriter(if(output.endsWith("gz")){ new GZIPOutputStream(new BufferedOutputStream(new FileOutputStream(output))) }
@@ -370,9 +371,8 @@ object Main{
     out.write("<xml>")
     for(i <- 1 to numSamples){
       val save = (i % (options.get('saveEvery).get.asInstanceOf[Int])) == 0
-      logger.info("sample #%d".format(i))
+      logger.info("sample #%d - %s".format(i, model))
       model.sample()
-      logger.info("%s".format(model))      
       if(save == true){ 
 	logger.info("saving model to %s".format(output))
 	model.save(out) 

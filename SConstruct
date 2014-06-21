@@ -176,7 +176,7 @@ for language, (lower_case_tagging, lower_case_morphology) in env["LANGUAGES"].it
         random_tags = env.RandomTags("work/xml_formatted/%s_random-tagging_%s.xml.gz" % (language, style_name), [training, env.Value(style_name)])
         random_segmentations = env.RandomSegmentations("work/xml_formatted/%s_random-morphology_%s.xml.gz" % (language, style_name), [training, env.Value(style_name)])
         tagging_results[(language, "random", style_name)] = env.EvaluateTagging("work/results/%s_random-tagging_%s.txt" % (language, style_name), [training, random_tags])
-        #morphology_results[(language, "random", style_name)] = env.EMMAScore("work/results/%s_random-morphology_%s.txt" % (language, style_name), training, random_segmentations[0])
+        morphology_results[(language, "random", style_name)] = env.EMMAScore("work/results/%s_random-morphology_%s.txt" % (language, style_name), training, random_segmentations[0])
         
         #
         # Tagging experiment
@@ -185,25 +185,24 @@ for language, (lower_case_tagging, lower_case_morphology) in env["LANGUAGES"].it
                                             [mt, env.Value("bhmm.Main"), training],
                                             ARGUMENTS="%s %s" % (common_parameters, tagging_parameters), MODE="tagging", TOKEN_BASED=token_based, LOWER_CASE_TAGGING=lower_case_tagging)    
         tagging_results[(language, "tagger", style_name)] = env.EvaluateTagging("work/results/%s_bhmm-tagging_%s.txt" % (language, style_name), [training, tagging])
-        #env.TopWordsByTag("work/top_words/%s_bhmm-tagging_%s.txt" % (language, style_name), tagging)
+        env.TopWordsByTag("work/top_words/%s_bhmm-tagging_%s.txt" % (language, style_name), tagging)
 
         #
         # Morphology experiments
         #
         morphology, morphology_log = env.RunScala(["work/xml_formatted/%s_ag-morphology_%s.xml.gz" % (language, style_name), "work/logs/%s_ag-morphology_%s.txt" % (language, style_name)], 
-                                                [mt, env.Value("bhmm.Main"), training],
-                                                ARGUMENTS="%s %s" % (common_parameters, morphology_parameters), MODE="morphology", TOKEN_BASED=token_based, LOWER_CASE_MORPHOLOGY=lower_case_morphology)        
-        #morphology_results[(language, "morph", style_name)] = env.EMMAScore("work/results/%s_ag-morphology_%s.txt" % (language, style_name), training, morphology)
-
-        #continue
+                                                  [mt, env.Value("bhmm.Main"), training],
+                                                  ARGUMENTS="%s %s" % (common_parameters, morphology_parameters), MODE="morphology", TOKEN_BASED=token_based, LOWER_CASE_MORPHOLOGY=lower_case_morphology)        
+        morphology_results[(language, "morph", style_name)] = env.EMMAScore("work/results/%s_ag-morphology_%s.txt" % (language, style_name), training, morphology)
+        continue
         #
         # Joint experiments
         #
         joint, joint_log = env.RunScala(["work/xml_formatted/%s_joint-model_%s.xml.gz" % (language, style_name), "work/logs/%s_joint-model_%s.log" % (language, style_name)], 
-                            [mt, env.Value("bhmm.Main"), training],
-                            ARGUMENTS="%s %s %s" % (common_parameters, tagging_parameters, morphology_parameters), MODE="joint", TOKEN_BASED=token_based, LOWER_CASE_TAGGING=lower_case_tagging, LOWER_CASE_MORPHOLOGY=lower_case_morphology)
-        #tagging_results[(language, "joint", style_name)] = env.EvaluateTagging("work/results/%s_joint-tagging_%s.txt" % (language, style_name), [training, joint])
-        #morphology_results[(language, "joint", style_name)] = env.EMMAScore("work/results/%s_joint-morphology_%s.txt" % (language, style_name), training, joint)
+                           [mt, env.Value("bhmm.Main"), training],
+                           ARGUMENTS="%s %s %s" % (common_parameters, tagging_parameters, morphology_parameters), MODE="joint", TOKEN_BASED=token_based, LOWER_CASE_TAGGING=lower_case_tagging, LOWER_CASE_MORPHOLOGY=lower_case_morphology)
+        tagging_results[(language, "joint", style_name)] = env.EvaluateTagging("work/results/%s_joint-tagging_%s.txt" % (language, style_name), [training, joint])
+        morphology_results[(language, "joint", style_name)] = env.EMMAScore("work/results/%s_joint-morphology_%s.txt" % (language, style_name), training, joint)
         #env.XMLToSadegh("work/for_sadegh/%s_%s.txt" % (language, style_name), joint)
 
 env.CollateResults("work/results/summary.txt", morphology_results.values() + tagging_results.values(), MORPHOLOGY_RESULTS=morphology_results, TAGGING_RESULTS=tagging_results)

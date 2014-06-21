@@ -4,9 +4,19 @@ import java.util.zip._
 import java.io.File
 import java.io._
 import java.util.logging._
+import AdaptorGrammar.Adaptor
+import Data.Segmentation
+import java.lang.String
 
 object Utilities{
   val logger = Logger.getLogger("bhmm")
+
+  implicit def adaptorToString(a : AdaptorGrammar.Adaptor) : String = {
+    val w = a.getWord()
+    val s = new Segmentation(w, 1)
+    s.completeSegmentationSpans(a, 0, true)
+    s.toSegmentedString(true).split(" ").map(_.split("_")(0)).mkString("+")
+  }
   val coarseTags = Map("CONJ" -> Seq("CC"),
 		       "DET" -> Seq("DT", "PDT"),
 		       "INPUNC" -> Seq("$", ",", ":", "LS", "SYM", "UH"),
