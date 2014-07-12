@@ -26,6 +26,7 @@ class DataSet(val sentences : Seq[Seq[(Int, Option[Int], Seq[Int])]],
   def print() : String = sentences.map{ s => s.map{ l => "%s/%s".format(indexToWord(l._1), 
 									indexToTag.getOrElse(l._2.getOrElse(-1), "-")
 								      )}.mkString(" ")}.mkString("\n")
+
   def apply(i : Int) : Seq[(Int, Option[Int], Seq[Int])] = sentences(i)
   def length : Int = sentences.length
   def iterator : Iterator[Seq[(Int, Option[Int], Seq[Int])]] = sentences.iterator
