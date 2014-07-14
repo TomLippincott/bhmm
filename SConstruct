@@ -30,6 +30,7 @@ vars.AddVariables(
     ("LOCAL_PATH", "", False),
     ("LANGUAGES", "", {}),
     BoolVariable("DEBUG", "", True),
+    BoolVariable("HAS_TORQUE", "", False),
 
     ("PYCFG_PATH", "", ""),
 
@@ -118,8 +119,12 @@ arguments = {"num_syntactic_classes" : 1,
              "markov" : 1,
              }
 
-models = ["TaggingCFG", "MorphologyCFG", "JointCFG"]
-models = ["TaggingCFG", "MorphologyCFG"]
+models = ["Tagging", 
+          "Morphology", 
+          "Joint", 
+          #"GoldTagsJointCFG", 
+          #"GoldSegmentationsJointCFG",
+      ]
 
 for language, (lower_case_tagging, lower_case_morphology) in env["LANGUAGES"].iteritems():
     env.Replace(LANGUAGE=language)
@@ -140,13 +145,12 @@ for language, (lower_case_tagging, lower_case_morphology) in env["LANGUAGES"].it
     # run all the different models
     for model in models:        
         env.Replace(MODEL=model)
-        cfg, data = getattr(env, model)(["work/pycfg/${LANGUAGE}/${MODEL}.txt", "work/pycfg/${LANGUAGE}/${MODEL}_data.txt.gz"], [training, Value(arguments)])
+        cfg, data = getattr(env, "%sCFG" % model)(["work/pycfg/${LANGUAGE}/${MODEL}.txt", "work/pycfg/${LANGUAGE}/${MODEL}_data.txt.gz"], [training, Value(arguments)])
         #output = env.RunPYCFGTorque(["work/pycfg/${LANGUAGE}/${MODEL}.%s" % x for x in ["out", "log"]], [cfg, data])
         output = env.RunPYCFG(["work/pycfg/${LANGUAGE}/${MODEL}.%s" % x for x in ["out", "log"]], [cfg, data])
-        #output = env.RunPYCFGTorque(["work/pycfg/torque.%s" % x for x in ["out", "log"]], [cfg, data])
-
+        #collated = getattr(env, "Collate%sOutput" % model)("work/pycfg/${LANGUAGE}/${MODEL}_collated.txt", output)
+        results = getattr(env, "Evaluate%s" % model)("work/pycfg/${LANGUAGE}/${MODEL}_results.txt", output)
     continue
-    
     # # OOV reduction evaluation data
     # small_oov = env.File("${EMNLP_DATA_PATH}/%s/oov_eval/small_eval.freq" % (language))
     # big_oov = env.File("${EMNLP_DATA_PATH}/%s/oov_eval/big_eval.freq" % (language))
