@@ -146,10 +146,15 @@ for language, (lower_case_tagging, lower_case_morphology) in env["LANGUAGES"].it
     for model in models:        
         env.Replace(MODEL=model)
         cfg, data = getattr(env, "%sCFG" % model)(["work/pycfg/${LANGUAGE}/${MODEL}.txt", "work/pycfg/${LANGUAGE}/${MODEL}_data.txt.gz"], [training, Value(arguments)])
-        #output = env.RunPYCFGTorque(["work/pycfg/${LANGUAGE}/${MODEL}.%s" % x for x in ["out", "log"]], [cfg, data])
         output = env.RunPYCFG(["work/pycfg/${LANGUAGE}/${MODEL}.%s" % x for x in ["out", "log"]], [cfg, data])
-        #collated = getattr(env, "Collate%sOutput" % model)("work/pycfg/${LANGUAGE}/${MODEL}_collated.txt", output)
         results = getattr(env, "Evaluate%s" % model)("work/pycfg/${LANGUAGE}/${MODEL}_results.txt", output)
+
+    #
+    # Morfessor experiments
+    #
+    morfessor_segmentations = env.TrainMorfessor("work/xml_formatted/${LANGUAGE}_morfessor.xml.gz", training)
+    #results = env.EMMAScore("work/results/${LANGUAGE}_morph_morfessor.txt", training, morfessor_segmentations[0])
+
     continue
     # # OOV reduction evaluation data
     # small_oov = env.File("${EMNLP_DATA_PATH}/%s/oov_eval/small_eval.freq" % (language))
@@ -187,11 +192,6 @@ for language, (lower_case_tagging, lower_case_morphology) in env["LANGUAGES"].it
     # # plot reductions
     # env.PlotReduction("work/plots/${LANGUAGE}.png", reductions.values(), REDUCTIONS=reductions, LANGUAGE=language)
 
-    #
-    # Morfessor experiments
-    #
-    morfessor_segmentations = env.TrainMorfessor("work/xml_formatted/%s_morfessor.xml.gz" % (language), training)
-    morphology_results[(language, "morfes.", "CAT")] = env.EMMAScore("work/results/%s_morph_morfessor.txt" % (language), training, morfessor_segmentations[0])
 
     for token_based in env["TOKEN_BASED"]:
 
