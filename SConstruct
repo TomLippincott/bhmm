@@ -31,6 +31,9 @@ vars.AddVariables(
     ("LANGUAGES", "", {}),
     BoolVariable("DEBUG", "", True),
     BoolVariable("HAS_TORQUE", "", False),
+    ("ANNEAL_INITIAL", "", 5),
+    ("ANNEAL_FINAL", "", 1),
+    ("ANNEAL_ITERATIONS", "", 0),
 
     ("PYCFG_PATH", "", ""),
 
