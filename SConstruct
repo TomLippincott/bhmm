@@ -139,7 +139,8 @@ for language, (lower_case_tagging, lower_case_morphology) in env["LANGUAGES"].it
     training = env.CONLLishToXML("work/data/${LANGUAGE}/train.xml.gz", data)
 
     # if we have gold standard morphology, add it in
-    if os.path.exists(env.subst("data/${LANGUAGE}_morphology.txt")):
+    has_morphology = os.path.exists(env.subst("data/${LANGUAGE}_morphology.txt"))
+    if has_morphology:
         training = env.AddMorphology("work/data/${LANGUAGE}/train_morph.xml.gz", [training, "data/${LANGUAGE}_morphology.txt"])
 
     # run all the different models
@@ -147,7 +148,7 @@ for language, (lower_case_tagging, lower_case_morphology) in env["LANGUAGES"].it
         env.Replace(MODEL=model)
         cfg, data = getattr(env, "%sCFG" % model)(["work/pycfg/${LANGUAGE}/${MODEL}.txt", "work/pycfg/${LANGUAGE}/${MODEL}_data.txt.gz"], [training, Value(arguments)])
         output = env.RunPYCFG(["work/pycfg/${LANGUAGE}/${MODEL}.%s" % x for x in ["out", "log"]], [cfg, data])
-        results = getattr(env, "Evaluate%s" % model)("work/pycfg/${LANGUAGE}/${MODEL}_results.txt", output)
+        results = getattr(env, "Evaluate%s" % model)("work/pycfg/${LANGUAGE}/${MODEL}_results.txt", [output[0], training])
 
     #
     # Morfessor experiments
