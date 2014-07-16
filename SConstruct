@@ -150,8 +150,8 @@ for language, (lower_case_tagging, lower_case_morphology) in env["LANGUAGES"].it
     for model in models:        
         env.Replace(MODEL=model)
         cfg, data = getattr(env, "%sCFG" % model)(["work/pycfg/${LANGUAGE}/${MODEL}.txt", "work/pycfg/${LANGUAGE}/${MODEL}_data.txt.gz"], [training, Value(arguments)])
-        output = env.RunPYCFG(["work/pycfg/${LANGUAGE}/${MODEL}.%s" % x for x in ["out", "log"]], [cfg, data])
-        results = getattr(env, "Evaluate%s" % model)("work/pycfg/${LANGUAGE}/${MODEL}_results.txt", [output[0], training])
+        segmentations, grammar, log = env.RunPYCFG(["work/pycfg/${LANGUAGE}/${MODEL}.%s" % x for x in ["segmentations", "grammar", "log"]], [cfg, data])
+        results = getattr(env, "Evaluate%s" % model)("work/pycfg/${LANGUAGE}/${MODEL}_results.txt", [segmentations, training])
 
     #
     # Morfessor experiments
