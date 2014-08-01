@@ -36,6 +36,7 @@ vars.AddVariables(
     ("ANNEAL_ITERATIONS", "", 0),
 
     ("PYCFG_PATH", "", ""),
+    ("MAXIMUM_SENTENCE_LENGTH", "", 20),
 
     # parameters shared by all models
     ("NUM_BURNINS", "", 1),
@@ -117,20 +118,26 @@ morphology_results = {}
 oov_eval_quality = {}
 
 
-arguments = {"num_syntactic_classes" : 1,
-             "num_tags" : 10,
-             "markov" : 1,
-             }
+#arguments = {"num_syntactic_classes" : 1,
+#             "num_tags" : 10,
+#             "markov" : 1,
+#             }
+
+arguments = {}
 
 models = ["Tagging", 
           "Morphology", 
           "Joint", 
-          #"GoldTagsJointCFG", 
-          #"GoldSegmentationsJointCFG",
+          "GoldTagsJoint", 
+          "GoldSegmentationsJoint",
       ]
 
 for language, (lower_case_tagging, lower_case_morphology) in env["LANGUAGES"].iteritems():
     env.Replace(LANGUAGE=language)
+    #env.Replace(LOWER_CASE_TAGGING=lower_case_tagging)
+    #env.Replace(LOWER_CASE_MORPHOLOGY=lower_case_morphology)
+    arguments["LOWER_CASE_TAGGING"] = lower_case_tagging
+    arguments["LOWER_CASE_MORPHOLOGY"] = lower_case_morphology
 
     # data set
     if os.path.exists(env.subst("${EMNLP_DATA_PATH}/${LANGUAGE}/pos_cap/train.pos")):
@@ -145,19 +152,22 @@ for language, (lower_case_tagging, lower_case_morphology) in env["LANGUAGES"].it
     has_morphology = os.path.exists(env.subst("data/${LANGUAGE}_morphology.txt"))
     if has_morphology:
         training = env.AddMorphology("work/data/${LANGUAGE}/train_morph.xml.gz", [training, "data/${LANGUAGE}_morphology.txt"])
+        #gold_morphology = env.DatasetToEMMA("work/pycfg/${LANGUAGE}/${MODEL}_morph_gold.txt", training)
 
     # run all the different models
     for model in models:        
         env.Replace(MODEL=model)
         cfg, data = getattr(env, "%sCFG" % model)(["work/pycfg/${LANGUAGE}/${MODEL}.txt", "work/pycfg/${LANGUAGE}/${MODEL}_data.txt.gz"], [training, Value(arguments)])
-        segmentations, grammar, log = env.RunPYCFG(["work/pycfg/${LANGUAGE}/${MODEL}.%s" % x for x in ["segmentations", "grammar", "log"]], [cfg, data])
-        results = getattr(env, "Evaluate%s" % model)("work/pycfg/${LANGUAGE}/${MODEL}_results.txt", [segmentations, training])
+        parses, grammar, trace_file, log = env.RunPYCFG(["work/pycfg/${LANGUAGE}/${MODEL}_%s.txt" % x for x in ["parses", "grammar", "trace", "log"]], [cfg, data])
+        
+        #results = getattr(env, "EvaluateMany%s" % model)("work/pycfg/${LANGUAGE}/${MODEL}_results.txt", [segmentations, gold])
+        #results = getattr(env, "Evaluate%s" % model)("work/results/${LANGUAGE}_${MODEL}_results.txt", [parses, training])
 
     #
     # Morfessor experiments
     #
-    morfessor_segmentations = env.TrainMorfessor("work/xml_formatted/${LANGUAGE}_morfessor.xml.gz", training)
-    #results = env.EMMAScore("work/results/${LANGUAGE}_morph_morfessor.txt", training, morfessor_segmentations[0])
+    #morfessor_segmentations = env.TrainMorfessor("work/xml_formatted/${LANGUAGE}_morfessor.xml.gz", training)
+    #results = env.EMMAScore("work/results/${LANGUAGE}_morph_morfessor.txt", morfessor_segmentations, training)
 
     continue
     # # OOV reduction evaluation data
