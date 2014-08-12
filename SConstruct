@@ -158,16 +158,16 @@ for language, (lower_case_tagging, lower_case_morphology) in env["LANGUAGES"].it
     for model in models:        
         env.Replace(MODEL=model)
         cfg, data = getattr(env, "%sCFG" % model)(["work/pycfg/${LANGUAGE}/${MODEL}.txt", "work/pycfg/${LANGUAGE}/${MODEL}_data.txt.gz"], [training, Value(arguments)])
-        parses, grammar, trace_file, log = env.RunPYCFG(["work/pycfg/${LANGUAGE}/${MODEL}_%s.txt" % x for x in ["parses", "grammar", "trace", "log"]], [cfg, data])
+        parses, grammar, trace_file = env.RunPYCFG(["work/pycfg/${LANGUAGE}/${MODEL}_%s.txt" % x for x in ["parses", "grammar", "trace"]], [cfg, data])
         
         #results = getattr(env, "EvaluateMany%s" % model)("work/pycfg/${LANGUAGE}/${MODEL}_results.txt", [segmentations, gold])
-        #results = getattr(env, "Evaluate%s" % model)("work/results/${LANGUAGE}_${MODEL}_results.txt", [parses, training])
+        results = getattr(env, "Evaluate%s" % model)("work/results/${LANGUAGE}_${MODEL}_results.txt", [parses, training])
 
     #
     # Morfessor experiments
     #
-    #morfessor_segmentations = env.TrainMorfessor("work/xml_formatted/${LANGUAGE}_morfessor.xml.gz", training)
-    #results = env.EMMAScore("work/results/${LANGUAGE}_morph_morfessor.txt", morfessor_segmentations, training)
+    morfessor_segmentations = env.TrainMorfessor("work/xml_formatted/${LANGUAGE}_morfessor.xml.gz", training)
+    results = env.EMMAScore("work/results/${LANGUAGE}_morph_morfessor.txt", morfessor_segmentations, training)
 
     continue
     # # OOV reduction evaluation data
