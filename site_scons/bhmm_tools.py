@@ -331,26 +331,39 @@ def conllish_to_xml(target, source, env):
         data.write(ofd)
     return None
 
+def rtm_to_data(target, source, env):
+    sentences = []
+    with meta_open(source[0].rstr()) as ifd:
+        for sentence in ifd:
+            words = [w for w in sentence.split()[5:] if w not in ["(())", "IGNORE_TIME_SEGMENT_IN_SCORING"]]
+            if len(words) > 0:
+                sentences.append(words)
+    dataset = DataSet.from_sentences([[(w, None, []) for w in s] for s in sentences])
+    with meta_open(target[0].rstr(), "w") as ofd:
+        dataset.write(ofd)
+    return None
+
 def TOOLS_ADD(env):
     env.Append(BUILDERS = {
-            "CONLLishToXML" : Builder(action=conllish_to_xml),
-            "RunScala" : Builder(action="${SCALA_BINARY} ${SCALA_OPTS} -cp ${SOURCES[0]} ${SOURCES[1]} --output ${TARGETS[0]} --input ${SOURCES[2]} ${ARGUMENTS}"),
-            "UkwabelanaToBHMM" : Builder(action=partial(generic_to_bhmm, get_sentences=ukwabelana_sentences, get_analyses=ukwabelana_analyses)),
-            "PennToBHMM" : Builder(action=partial(generic_to_bhmm, get_sentences=penn_sentences, get_analyses=generic_analyses)),
-            "UpcToBHMM" : Builder(action=partial(generic_to_bhmm, get_sentences=upc_sentences)),
-            "TigerToBHMM" : Builder(action=partial(generic_to_bhmm, get_sentences=tiger_sentences)),
-            "StandardizedToBHMM" : Builder(action=partial(generic_to_bhmm, get_sentences=standardized_sentences, get_analyses=generic_analyses)),
-            #"BabelToBHMM" : Builder(action=partial(generic_to_bhmm, 
-            #                                       get_limited_training=babel_limited_training, 
-            #                                       get_full_training=babel_full_training,
+        "CONLLishToXML" : Builder(action=conllish_to_xml),
+        "RunScala" : Builder(action="${SCALA_BINARY} ${SCALA_OPTS} -cp ${SOURCES[0]} ${SOURCES[1]} --output ${TARGETS[0]} --input ${SOURCES[2]} ${ARGUMENTS}"),
+        "UkwabelanaToBHMM" : Builder(action=partial(generic_to_bhmm, get_sentences=ukwabelana_sentences, get_analyses=ukwabelana_analyses)),
+        "PennToBHMM" : Builder(action=partial(generic_to_bhmm, get_sentences=penn_sentences, get_analyses=generic_analyses)),
+        "UpcToBHMM" : Builder(action=partial(generic_to_bhmm, get_sentences=upc_sentences)),
+        "TigerToBHMM" : Builder(action=partial(generic_to_bhmm, get_sentences=tiger_sentences)),
+        "StandardizedToBHMM" : Builder(action=partial(generic_to_bhmm, get_sentences=standardized_sentences, get_analyses=generic_analyses)),
+        #"BabelToBHMM" : Builder(action=partial(generic_to_bhmm, 
+    #                                       get_limited_training=babel_limited_training, 
+        #                                       get_full_training=babel_full_training,
             #                                       get_development=babel_development,
-            #                                       get_analyses=generic_analyses)),                                                   
-            #"EvaluateMorphology" : Builder(action="python bin/EMMA2.py -g ${SOURCES[0]} -p ${SOURCES[1]} > ${TARGET}"),
-            #"DatasetToEmma" : Builder(action=dataset_to_emma),
-
-            "XMLToSadegh" : Builder(action=xml_to_sadegh, emitter=xml_to_sadegh_emitter),
-            "CollateResults" : Builder(action=collate_results),
-            "CreateSubset" : Builder(action=create_subset),
-            "MorfessorToTripartite" : Builder(action=morfessor_to_tripartite),
-            "TopWordsByTag" : Builder(action=top_words_by_tag),
-            })
+        #                                       get_analyses=generic_analyses)),                                                   
+        #"EvaluateMorphology" : Builder(action="python bin/EMMA2.py -g ${SOURCES[0]} -p ${SOURCES[1]} > ${TARGET}"),
+        #"DatasetToEmma" : Builder(action=dataset_to_emma),
+        
+        "XMLToSadegh" : Builder(action=xml_to_sadegh, emitter=xml_to_sadegh_emitter),
+        "CollateResults" : Builder(action=collate_results),
+        "CreateSubset" : Builder(action=create_subset),
+        "MorfessorToTripartite" : Builder(action=morfessor_to_tripartite),
+        "TopWordsByTag" : Builder(action=top_words_by_tag),
+        "RtmToData" : Builder(action=rtm_to_data),
+    })

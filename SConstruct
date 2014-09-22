@@ -35,9 +35,13 @@ vars.AddVariables(
     ("ANNEAL_FINAL", "", 1),
     ("ANNEAL_ITERATIONS", "", 0),
 
+    ("INDUSDB_PATH", "", None),
+
+    ("CABAL", "", "/home/tom/.cabal"),
     ("PYCFG_PATH", "", ""),
     ("MAXIMUM_SENTENCE_LENGTH", "", 20),
-
+    ("HASKELL_PATH", "", ""),
+    
     # parameters shared by all models
     ("NUM_BURNINS", "", 1),
     ("NUM_SAMPLES", "", 1),
@@ -132,12 +136,19 @@ models = ["Tagging",
           "GoldSegmentationsJoint",
       ]
 
-for language, (lower_case_tagging, lower_case_morphology) in env["LANGUAGES"].iteritems():
+#for language, (lower_case_tagging, lower_case_morphology) in env["LANGUAGES"].iteritems():
+for language, properties in env["LANGUAGES"].iteritems():
+    env.Replace(LANGUAGE=language)
+    babel_id = properties.get("BABEL_ID", None)
+            #ngram_cfg, ngram_data = env.NGram(["work/models/${LANGUAGE}_ngram.txt", "work/data/${LANGUAGE}_ngram.txt.gz"], [data, Value({"lowercase" : True})])
+            #parses, grammar, trace_file = env.RunPYCFG(["work/pycfg/${LANGUAGE}/ngram_%s.txt" % x for x in ["parses", "grammar", "trace"]], [ngram_cfg, ngram_data])
+            #print language, babel_id, rtm
+    #continue
     env.Replace(LANGUAGE=language)
     #env.Replace(LOWER_CASE_TAGGING=lower_case_tagging)
     #env.Replace(LOWER_CASE_MORPHOLOGY=lower_case_morphology)
-    arguments["LOWER_CASE_TAGGING"] = lower_case_tagging
-    arguments["LOWER_CASE_MORPHOLOGY"] = lower_case_morphology
+    #arguments["LOWER_CASE_TAGGING"] = lower_case_tagging
+    #arguments["LOWER_CASE_MORPHOLOGY"] = lower_case_morphology
 
     # data set
     if os.path.exists(env.subst("${EMNLP_DATA_PATH}/${LANGUAGE}/pos_cap/train.pos")):
@@ -153,21 +164,52 @@ for language, (lower_case_tagging, lower_case_morphology) in env["LANGUAGES"].it
     if has_morphology:
         training = env.AddMorphology("work/data/${LANGUAGE}/train_morph.xml.gz", [training, "data/${LANGUAGE}_morphology.txt"])
         #gold_morphology = env.DatasetToEMMA("work/pycfg/${LANGUAGE}/${MODEL}_morph_gold.txt", training)
+    
+        #if babel_id or True:
+        #rtms = env.Glob("${INDUSDB_PATH}/IARPA-babel*/IARPA-babel%.3d*-dev.stm" % babel_id)
+        #if len(rtms) == 1:
+            #rtm = rtms[0]
+            #data = env.RtmToData("work/data/${LANGUAGE}.txt.gz", rtm)
+        #     ndata
+    #prefixes, suffixes = env.ExtractAffixes(["work/affixes/${LANGUAGE}_prefixes.txt", "work/affixes/${LANGUAGE}_suffixes.txt"], training)
+    #for keep in [0]: #, 50, 100, 500]:
+    #    env.Replace(KEEP=keep)
+    for has_prefixes in [True, False]:
+        for has_suffixes in [True, False]:
+            if has_prefixes == has_suffixes and not has_prefixes:
+                continue
+            arguments = Value({"MODEL" : "morphology",
+                          "LANGUAGE" : language,
+                          "HAS_PREFIXES" : has_prefixes,
+                          "HAS_SUFFIXES" : has_suffixes,
+                      })
+            pycfg_model, pycfg_data = env.CreateModel([training, arguments])
+
+            #pycfg_model, pycfg_data = env.CreateModel(["work/models/${LANGUAGE}_${HAS_PREFIXES}_${HAS_SUFFIXES}.txt", "work/models/${LANGUAGE}_${HAS_PREFIXES}_${HAS_SUFFIXES}_data.txt"], 
+            #                                          training)
+            parses, grammar, trace_file = env.RunPYCFG([pycfg_model, pycfg_data, arguments])
+            if has_morphology:
+                
+                results = getattr(env, "EvaluateMorphology")(parses, training, "data/${LANGUAGE}_morphology.txt")
+
+    continue
+
 
     # run all the different models
     for model in models:        
         env.Replace(MODEL=model)
         cfg, data = getattr(env, "%sCFG" % model)(["work/pycfg/${LANGUAGE}/${MODEL}.txt", "work/pycfg/${LANGUAGE}/${MODEL}_data.txt.gz"], [training, Value(arguments)])
         parses, grammar, trace_file = env.RunPYCFG(["work/pycfg/${LANGUAGE}/${MODEL}_%s.txt" % x for x in ["parses", "grammar", "trace"]], [cfg, data])
-        
-        #results = getattr(env, "EvaluateMany%s" % model)("work/pycfg/${LANGUAGE}/${MODEL}_results.txt", [segmentations, gold])
-        results = getattr(env, "Evaluate%s" % model)("work/results/${LANGUAGE}_${MODEL}_results.txt", [parses, training])
+        #if has_morphology:
+        results = getattr(env, "Evaluate%s" % model)("work/results/${LANGUAGE}_${MODEL}.txt", [parses, training])
 
     #
     # Morfessor experiments
     #
     morfessor_segmentations = env.TrainMorfessor("work/xml_formatted/${LANGUAGE}_morfessor.xml.gz", training)
-    results = env.EMMAScore("work/results/${LANGUAGE}_morph_morfessor.txt", morfessor_segmentations, training)
+    if has_morphology:
+        env.Replace(MODEL="Morfessor")
+        results = env.EMMAScore("work/results/${LANGUAGE}_${MODEL}.txt", morfessor_segmentations, training)
 
     continue
     # # OOV reduction evaluation data
